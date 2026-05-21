@@ -34,12 +34,10 @@ class UserRepo(AbstractRepository[User]):
     class Meta:
         collection_name = 'users'
 
-    def authenticate(self, session_token: str):
-        pass
-
 class Tag(BaseModel):
     id: PydanticObjectId = None
     name: str
+    created_by: PydanticObjectId
 
 class TagRepo(AbstractRepository[Tag]):
     class Meta:

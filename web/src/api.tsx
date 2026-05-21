@@ -8,6 +8,7 @@ export class ApiRequest {
     this.path = ""
     this.init = {
       headers: {},
+      credentials: "include",
     }
   }
 
@@ -17,20 +18,38 @@ export class ApiRequest {
     return this
   }
 
-  post(path: string, body: any) {
+  body(body: any = null) {
+    if (body) {
+      this.init.body = JSON.stringify(body)
+    }
+  }
+
+  post(path: string, body: any = null) {
     this.init.method = "POST"
-    this.init.body = JSON.stringify(body)
+    this.body(body)
+    this.path = path
+    return this
+  }
+
+  put(path: string, body: any = null) {
+    this.init.method = "PUT"
+    this.body(body)
     this.path = path
     return this
   }
 
   response() {
     return {
-      json: <D,>() => {
+      json: <D = any,>() => {
         this.init.headers = {
           ...(this.init.headers ?? {}),
           "Content-Type": "application/json",
         }
+        return fetch(`${this.baseUrl}${this.path}`, this.init).then(
+          (res) => res.json() as Promise<D>,
+        )
+      },
+      do: <D = any,>() => {
         return fetch(`${this.baseUrl}${this.path}`, this.init).then(
           (res) => res.json() as Promise<D>,
         )

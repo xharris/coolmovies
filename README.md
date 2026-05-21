@@ -25,7 +25,12 @@
     - [ ] Store media in DB: src(url), img, title, description
   - [ ] Vote on tag for media
     - [ ] Look into:
-      1. Cloudflare Turnstile (free, low friction) — kills most bots
-      2. IP rate limiting with Redis (e.g., 1 vote per IP per 24h)
-      3. Signed session token — prevents double-submit from same load
-      4. localStorage/cookie flag — stops casual refresh spam
+      - [ ] IP rate limiting with redis
+      - [ ] signed session token
+
+## AI Notes
+
+1. Cloudflare Turnstile (free, low friction) — kills most bots
+2. IP rate limiting with Redis (e.g., 1 vote per IP per 24h)
+3. Signed session token — prevents double-submit from same load
+4. localStorage/cookie flag — stops casual refresh spam

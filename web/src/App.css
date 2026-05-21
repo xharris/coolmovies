@@ -16,10 +16,3 @@
     font-family: "Coolvetica";
   }
 }
-
-input:focus {
-  outline: none;
-  border: 3px solid;
-
-  @apply shadow-2xl border-base-300 bg-base-200;
-}

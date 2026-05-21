@@ -1,6 +1,7 @@
 import {
   QueryClient,
   QueryClientProvider,
+  useMutation,
   useQuery,
 } from "@tanstack/react-query"
 import "./App.css"
@@ -8,7 +9,8 @@ import { useEffect, useRef, useState, type ReactNode } from "react"
 import { ApiRequest } from "./api"
 import { cx } from "./classnameswrap"
 import { createBrowserRouter, Link, RouterProvider } from "react-router"
-import { FiCheck, FiPlus } from "react-icons/fi"
+import { FiCheck, FiMenu, FiPlus } from "react-icons/fi"
+import { useForm } from "react-hook-form"
 
 type Media = {
   id: string
@@ -19,7 +21,16 @@ type Media = {
   imdb_url?: string
 }
 
-const apiClient = new ApiRequest("http://127.0.0.1:8000/api/")
+type AddMediaTagBody = {
+  mediaId: string
+  tagId: string
+}
+
+type AddTagBody = {
+  tagName: string
+}
+
+const apiClient = new ApiRequest("http://localhost:8000/api/")
 const queryClient = new QueryClient()
 
 const App = () => {
@@ -31,13 +42,31 @@ const App = () => {
     enabled: !!query.length,
   })
   const [selectedMedia, setSelectedMedia] = useState<Media>()
+  // api: add to to media
+  const { mutateAsync: addMediaTag } = useMutation({
+    mutationFn: (body: AddMediaTagBody) =>
+      apiClient
+        .put(`media/${body.mediaId}/addtag/${body.tagId}`)
+        .response()
+        .json(),
+    onSuccess: () => queryClient.invalidateQueries(),
+  })
+  // api: add tag
+  const { mutateAsync: addTag } = useMutation({
+    mutationFn: (body: AddTagBody) =>
+      apiClient.post(`tag/add/${body.tagName}`).response().do(),
+  })
+  const { register, handleSubmit } = useForm<AddTagBody>({
+    values: { tagName: "" },
+  })
+
   return (
     <div className="overflow-y-auto mx-auto overflow-x-hidden md:max-w-2xl w-full absolute inset-0 flex flex-col gap-3">
       <div className="navbar gap-2 pb-0">
         <div className="navbar-start flex-0">
-          <a className="btn btn-ghost text-lg uppercase">cineblazed</a>
+          <a className="btn btn-ghost text-lg uppercase">coolmovies420</a>
         </div>
-        <div className="navbar-center flex-1">
+        <div className="navbar-center flex-1 gap-2">
           {/* search */}
           <input
             className="input flex-1 transition-all"
@@ -46,6 +75,41 @@ const App = () => {
             value={query}
             onChange={(e) => setQuery(e.target.value)}
           />
+          {/* menu */}
+          <button
+            className="btn btn-square"
+            onClick={() =>
+              (document.getElementById("menu") as HTMLDialogElement).showModal()
+            }
+          >
+            <FiMenu />
+          </button>
+          <dialog id="menu" className="modal">
+            <div className="modal-box">
+              <h3 className="text-lg font-bold">Menu</h3>
+              {/* add tag form */}
+              <form
+                className="flex flex-col gap-2 w-full"
+                onSubmit={handleSubmit((d) => addTag(d))}
+              >
+                {/* add tag input */}
+                <label className="input w-full">
+                  <span className="label">Add tag</span>
+                  <input
+                    {...register("tagName", { required: true })}
+                    type="text"
+                    placeholder="Name"
+                  />
+                </label>
+                {/* add tag submit */}
+                <button className="btn">Add</button>
+              </form>
+            </div>
+
+            <form method="dialog" className="modal-backdrop">
+              <button>Close</button>
+            </form>
+          </dialog>
         </div>
       </div>
       {/* filters */}
