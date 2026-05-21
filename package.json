@@ -1,0 +1,17 @@
+{
+  "name": "coolmovies",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "scripts": {
+    "main": "UV_ENV_FILE=.env uv run -m main",
+    "dev": "concurrently 'UV_ENV_FILE=.env uv run fastapi dev' 'cd web && pnpm dev'"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "packageManager": "pnpm@10.23.0",
+  "devDependencies": {
+    "concurrently": "^9.2.1"
+  }
+}

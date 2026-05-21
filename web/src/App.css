@@ -1,15 +1,25 @@
 @import "tailwindcss";
 @plugin "daisyui" {
-  themes: abyss, forest;
+  themes: abyss, synthwave, cyberpunk, halloween, coffee, aqua, night;
 }
 
-:focus {
-  outline: none;
-  border: 3px solid;
+@font-face {
+  font-family: "Coolvetica";
+  src: url("../public/coolvetica/Coolvetica\ Rg.otf");
+}
 
-  @apply shadow-2xl border-base-300;
+@layer base {
+  html {
+    @apply scroll-smooth;
+  }
+  body {
+    font-family: "Coolvetica";
+  }
 }
 
 input:focus {
-  @apply bg-base-200;
+  outline: none;
+  border: 3px solid;
+
+  @apply shadow-2xl border-base-300 bg-base-200;
 }
