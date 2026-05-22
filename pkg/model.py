@@ -3,6 +3,11 @@ from bson import ObjectId
 from pydantic_mongo import AbstractRepository, PydanticObjectId
 from typing import List, Optional, Dict
 from httpx import Client
+from enum import StrEnum
+
+class MediaType(StrEnum):
+    watch = 'watch'
+    play = 'play'
 
 class Media(BaseModel):
     class Stats(BaseModel):
@@ -13,7 +18,8 @@ class Media(BaseModel):
     title: str
     year: int
     stats: Stats = Field(default_factory=Stats)
-    img: str = None
+    type: MediaType = Field(default=MediaType.watch)
+    img: Optional[str] = None
     imdb_id: Optional[str] = None
     imdb_url: Optional[str] = None
 
@@ -37,8 +43,12 @@ class MediaRepo(AbstractRepository[Media]):
             "$or": [{"_id": PydanticObjectId(_id)}, {"imdb_id": _id}],
         })
 
+class UserRole(StrEnum):
+    admin = 'admin'
+
 class User(BaseModel):
     id: PydanticObjectId = None
+    roles: List[UserRole] = Field(default_factory=list)
 
 class UserRepo(AbstractRepository[User]):
     class Meta:

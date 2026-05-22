@@ -1,6 +1,6 @@
 @import "tailwindcss";
 @plugin "daisyui" {
-  themes: abyss, synthwave, cyberpunk, halloween, coffee, aqua, night;
+  themes: all;
 }
 
 @font-face {
@@ -15,4 +15,8 @@
   body {
     font-family: "Coolvetica";
   }
+}
+
+@utility content-auto {
+  content-visibility: auto;
 }

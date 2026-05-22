@@ -1,6 +1,6 @@
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
-from pkg import model, fmdb, env, auth
+from pkg import client, model, env, auth, math2
 from pymongo import MongoClient
 from typing import List, Dict, Annotated
 from pydantic import BaseModel
@@ -25,8 +25,8 @@ app.add_middleware(
     allow_headers=["*"]
 )
 
-client = MongoClient(environ.get("MONGODB_URL"))
-db = client.get_database(environ.get("MONGODB_NAME"))
+db_client = MongoClient(environ.get("MONGODB_URL"))
+db = db_client.get_database(environ.get("MONGODB_NAME"))
 DependsCurrentUser = auth.make_depends_user(db)
 
 def migrate():
@@ -34,6 +34,7 @@ def migrate():
     # missing Media.stats
     medias: List[model.Media] = list(media_repo.find_by({"stats": {"$exists": False}}))
     media_repo.save_many(medias)
+
 
 def update_media_stats(media: model.Media):
     tag_repo = model.TagRepo(db)
@@ -58,41 +59,64 @@ def media_all():
         {"$match": {"votesArray.v": {"$gt": 0}}},
         {"$unset": "votesArray"},
     ])
-    return [model.Media(**{**doc, "id": doc["_id"]}) for doc in docs]
+    user_count = model.UserRepo(db).get_collection().count_documents({})
+    medias = [model.Media(**{**doc, "id": doc["_id"]}) for doc in docs]
+    return sorted(
+        [{**m.model_dump(mode="json"), "rank": math2.compute_rank(m, user_count)} for m in medias],
+        key=lambda m: m["rank"],
+        reverse=True,
+    )
 
 class MediaSearchBody(BaseModel):
     query: str
 
 @app.post("/api/media/search")
 def media_search(body: MediaSearchBody):
-    client = fmdb.FMDB()
-    res = client.search_imdb(body.query)
-    res.raise_for_status()
+    new_medias: List[model.Media] = []
+    # search imdb
+    imdb_client = client.FMDB()
+    res = imdb_client.search_imdb(body.query)
+    try:
+        res.raise_for_status()
+    except Exception as e:
+        log.error("could not search fmdb: %s", e)
     data = res.json()
-    if not data["ok"]:
-        pass
+    if data["ok"]:
+        for item in data["description"]:
+            try:
+                new = model.Media(
+                    title=item.get("#TITLE"),
+                    year=item.get("#YEAR"),
+                    imdb_id=item.get("#IMDB_ID"),
+                    imdb_url=item.get("#IMDB_URL"),
+                    img=item.get("#IMG_POSTER"),
+                )
+                new_medias.append(new)
+            except Exception as e:
+                log.warning("could not parse fmdb item:\nitem=%s\n%s", item, e)
+    # search thegamesdb
+    games_client = client.TheGamesDB()
+    res = games_client.games_by_game_name(body.query, ['platform'])
+    try:
+        res.raise_for_status()
+    except Exception as e:
+        log.error("could not search thegamesdb: %s", e)
+    if res.is_success:
+        data = res.json()
+        for item in data:
+            print(item)
     # store in db
     repo = model.MediaRepo(db)
     medias: List[model.Media] = []
     item: Dict
-    for item in data["description"]:
-        try:
-            media = model.Media(
-                title=item.get("#TITLE"),
-                year=item.get("#YEAR"),
-                imdb_id=item.get("#IMDB_ID"),
-                imdb_url=item.get("#IMDB_URL"),
-                img=item.get("#IMG_POSTER"),
-            )
-            if m := repo.find_one_by({"imdb_id": media.imdb_id}):
-                log.info("save existing: %s", m)
-                medias.append(m)
-            else:
-                log.info("add media: %s", media)
-                repo.save(media)
-                medias.append(media)
-        except Exception as e:
-            log.warning("could not parse fmdb item:\nitem=%s\n%s", item, e)
+    for new in new_medias:
+        if m := repo.find_one_by({"$or": [{"imdb_id": new.imdb_id}]}):
+            log.info("save existing: %s (%d, %s)", m.title, m.year, m.imdb_id)
+            medias.append(m)
+        else:
+            log.info("add media: %s (%d, %s)", new.title, new.year, new.imdb_id)
+            repo.save(new)
+            medias.append(new)
     return medias
 
 @app.get("/api/tag/all")
@@ -101,6 +125,11 @@ def tag_all():
 
 @app.post("/api/tag/add/{name}")
 def tag_add(name: str, current_user: Annotated[str,DependsCurrentUser]):
+    # check user user role
+    user_repo = model.UserRepo(db)
+    user = user_repo.find_one_by_id(current_user)
+    if not user or not model.UserRole.admin in user.roles:
+        raise HTTPException(401)
     name = name.lower()
     tag_repo = model.TagRepo(db)
     tag = tag_repo.find_one_by({"name": name})
@@ -174,7 +203,17 @@ def media_remove_tag(media_id: str, tag_id: str, current_user: Annotated[str,Dep
 @app.get("/api/user/count")
 def user_count():
     user_repo = model.UserRepo(db)
-    return user_repo.get_collection().count_documents()
+    return user_repo.get_collection().count_documents({})
+
+@app.get('/api/user/roles')
+def user_roles(current_user: Annotated[str,DependsCurrentUser]):
+    user_repo = model.UserRepo(db)
+    user = user_repo.find_one_by_id(PydanticObjectId(current_user))
+    if not user:
+        log.error("user not found: id=%s", current_user)
+        return []
+    log.info('found user: %s', user)
+    return user.roles
 
 @app.get("/api/auth/check")
 def auth_check(user_id: Annotated[str, DependsCurrentUser]):

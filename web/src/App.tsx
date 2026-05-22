@@ -21,11 +21,12 @@ import {
   RouterProvider,
   useSearchParams,
 } from "react-router"
-import { FiCheck, FiLoader, FiMenu, FiPlus } from "react-icons/fi"
+import { FiCheck, FiLoader, FiMenu, FiX } from "react-icons/fi"
 import { useForm } from "react-hook-form"
-import { useDebounceValue } from "usehooks-ts"
+import { useDebounceValue, useLocalStorage } from "usehooks-ts"
 import { api } from "./api"
 import { wilson_score_lower } from "./math2"
+import { FaTag } from "react-icons/fa"
 
 type Media = {
   id: string
@@ -37,6 +38,7 @@ type Media = {
   stats: {
     votes: Record<string, number>
   }
+  rank?: number
 }
 
 type Tag = {
@@ -59,6 +61,17 @@ type AddTagBody = {
   tagName: string
 }
 
+type UserRole = "admin"
+
+const tagNameToTheme: Record<string, string> = {
+  scary: "abyss",
+  trippy: "synthwave",
+  confusing: "sunset",
+  relaxing: "coffee",
+}
+const getTheme = (tag?: Tag) =>
+  tag && tagNameToTheme[tag.name] ? tagNameToTheme[tag.name] : undefined
+
 const queryClient = new QueryClient()
 
 export const useAllTags = () =>
@@ -68,6 +81,10 @@ export const useAllTags = () =>
   })
 
 const App = () => {
+  const { data: userRoles } = useQuery({
+    queryKey: ["user_role"],
+    queryFn: () => api.get("/user/roles").json<UserRole[]>(),
+  })
   const { data: allTags } = useAllTags()
   const { data: allMedias } = useQuery({
     queryKey: ["media"],
@@ -77,6 +94,10 @@ const App = () => {
     queryKey: ["user_count"],
     queryFn: () => api.get("/user/count").text().then(parseInt),
   })
+  // media tag filter
+  const [mediaFilter, setMediaFilter] = useLocalStorage("media-fiter", {
+    excludeTags: [] as string[],
+  })
   // search query
   const [params, setParams] = useSearchParams({ q: "" })
   const [query, setQueryState] = useState(() => params.get("q") ?? "")
@@ -84,7 +105,11 @@ const App = () => {
     setQueryState(value)
     setParams(
       (prev) => {
-        prev.set("q", value)
+        if (!!value.length) {
+          prev.set("q", value)
+        } else {
+          prev.delete("q")
+        }
         return prev
       },
       { replace: true },
@@ -98,6 +123,7 @@ const App = () => {
       api.post({ query: queryDebounced }, "/media/search").json<Media[]>(),
     enabled: !!queryDebounced.length,
     placeholderData: keepPreviousData,
+    networkMode: "offlineFirst",
   })
   const [selectedMediaId, setSelectedMediaId] = useState<string>()
   const isSearching = useMemo(
@@ -109,10 +135,16 @@ const App = () => {
     if (!!query.length) {
       medias = searchResults ?? []
     } else if (allMedias) {
-      medias = allMedias
+      medias = allMedias.sort((a, b) => (b.rank ?? 0) - (a.rank ?? 0))
     }
-    return medias
-  }, [searchResults, allMedias, query])
+    return medias.filter(
+      (m) =>
+        // does not have excluded tag
+        !Object.keys(m.stats.votes).filter(
+          (id) => mediaFilter.excludeTags.includes(id) && !!m.stats.votes[id],
+        ).length,
+    )
+  }, [searchResults, allMedias, query, mediaFilter])
   const selectedMedia = useMemo(
     () =>
       listMedias.find((m) => m.id === selectedMediaId) ??
@@ -130,162 +162,196 @@ const App = () => {
   })
 
   return (
-    <div className="overflow-y-auto mx-auto overflow-x-hidden md:max-w-2xl w-full absolute inset-0 flex flex-col gap-3">
-      <div className="navbar gap-2 pb-0">
-        <div className="navbar-start flex-0">
-          <a
-            className={cx(
-              "btn btn-ghost text-lg uppercase",
-              isSearching && "text-primary animate-pulse",
-            )}
-          >
-            coolmovies420
-          </a>
-        </div>
-        <div className="navbar-center flex-1 gap-2">
-          {/* search */}
-          <input
-            className="input flex-1 transition-all"
-            type="text"
-            placeholder="Search for stuff..."
-            value={query}
-            onChange={(e) => setQuery(e.target.value)}
-          />
-          {/* menu */}
-          <button
-            className="btn btn-square"
-            onClick={() =>
-              (document.getElementById("menu") as HTMLDialogElement).showModal()
-            }
-          >
-            <FiMenu />
-          </button>
-          <dialog id="menu" className="modal">
-            <div className="modal-box">
-              <h3 className="text-lg font-bold">Menu</h3>
-              {/* add tag form */}
-              <form
-                className="flex flex-col gap-2 w-full"
-                onSubmit={handleSubmit((d) => addTag(d))}
-              >
-                {/* add tag input */}
-                <label className="input w-full">
-                  <span className="label">Add tag</span>
-                  <input
-                    {...register("tagName", { required: true })}
-                    type="text"
-                    placeholder="Name"
-                  />
-                </label>
-                {/* add tag submit */}
-                <button className="btn">Add</button>
-              </form>
-            </div>
-
-            <form method="dialog" className="modal-backdrop">
-              <button>Close</button>
-            </form>
-          </dialog>
-        </div>
-      </div>
-      {/* filters */}
-      <div className="inline-flex gap-2 px-3">
-        <MediaTag label="Filters" className="opacity-50" />
-        {allTags?.map((t) => (
-          <MediaTag key={t.id} label={t.name} />
-        ))}
-      </div>
-      {/* search results */}
-      <div className="flex flex-col px-3 gap-2">
-        {listMedias?.map((r) => {
-          const totalVotes = Object.values(r.stats.votes).reduce(
-            (prev, curr) => prev + curr,
-            0,
-          )
-          return (
-            <div key={r.id} className="p-3 bg-base-300">
-              <div className="bg-base-300 relative rounded flex flex-col min-h-24 w-full">
-                {/* img */}
-                {r.img ? (
-                  <div className="absolute inset-0 w-1/3">
-                    <img
-                      src={r.img}
-                      className="w-full h-full object-cover brightness-125 rounded"
-                    />
-                  </div>
+    <div className="overflow-y-auto overflow-x-hidden" data-theme="black">
+      <div className="mx-auto md:max-w-2xl w-full absolute inset-0 flex flex-col gap-3">
+        <div className="navbar gap-2 pb-0">
+          <div className="navbar-start flex-0">
+            <button
+              className={cx(
+                "btn btn-ghost text-lg uppercase",
+                isSearching && "text-primary animate-pulse",
+              )}
+              onClick={() => setQuery("")}
+            >
+              coolmovies420
+            </button>
+          </div>
+          <div className="navbar-center flex-1 gap-2">
+            {/* search */}
+            <input
+              className="input flex-1 transition-all"
+              type="text"
+              placeholder="Search for stuff..."
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+            />
+            {/* menu */}
+            <button
+              className="btn btn-square"
+              onClick={() =>
+                (
+                  document.getElementById("menu") as HTMLDialogElement
+                ).showModal()
+              }
+            >
+              <FiMenu />
+            </button>
+            <dialog id="menu" className="modal">
+              <div className="modal-box">
+                <h3 className="text-lg font-bold">About</h3>
+                <p>Search for movies, shows, anime, and games using vibes.</p>
+                <p>xhh © 2026</p>
+                {/* add tag form */}
+                {userRoles?.includes("admin") ? (
+                  <form
+                    className="flex flex-col gap-2 w-full"
+                    onSubmit={handleSubmit((d) => addTag(d))}
+                  >
+                    {/* add tag input */}
+                    <label className="input w-full">
+                      <span className="label">Add tag</span>
+                      <input
+                        {...register("tagName", { required: true })}
+                        type="text"
+                        placeholder="Name"
+                      />
+                    </label>
+                    {/* add tag submit */}
+                    <button className="btn">Add</button>
+                  </form>
                 ) : null}
-                {/* info */}
-                <div className="z-10 leading-snug h-full flex gap-3">
-                  <div className="w-1/3 shrink-0" />
-                  <div className="flex flex-col justify-between w-full gap-1">
-                    <div className="flex flex-col gap-1">
-                      <div className="w-full">
-                        {/* title */}
-                        <button
-                          onClick={() => setSelectedMediaId(r.id)}
-                          className="text-left cursor-pointer"
-                        >
-                          <span className="text-2xl leading-tight text-left">
-                            {r.title}
-                          </span>
-                          {/* year */}
-                          <MediaTag
-                            className="text-neutral-600! mx-1"
-                            labelClassName="bg-neutral-300"
-                            label={r.year}
-                          />
-                        </button>
-                      </div>
-                      <div className="inline-flex gap-1">
-                        {/* urls */}
-                        {r.imdb_url ? (
-                          <Link to={r.imdb_url}>
-                            <MediaTag label="IMDB" small />
-                          </Link>
-                        ) : null}
-                      </div>
+              </div>
+              <form method="dialog" className="modal-backdrop">
+                <button>Close</button>
+              </form>
+            </dialog>
+          </div>
+        </div>
+        {/* filters */}
+        <div className="inline-flex gap-2 px-3">
+          <MediaTag label="Filters" className="opacity-50" />
+          {allTags?.map((t) => {
+            const isEnabled = !mediaFilter.excludeTags.includes(t.id)
+            return (
+              <button
+                className="cursor-pointer"
+                onClick={() =>
+                  setMediaFilter((prev) => ({
+                    ...prev,
+                    excludeTags: isEnabled
+                      ? [...prev.excludeTags, t.id]
+                      : prev.excludeTags.filter((id) => id !== t.id),
+                  }))
+                }
+                data-theme={isEnabled ? getTheme(t) : undefined}
+              >
+                <MediaTag
+                  key={t.id}
+                  label={t.name}
+                  checked={isEnabled}
+                  primary={isEnabled}
+                  icon={!isEnabled ? <FiX /> : null}
+                />
+              </button>
+            )
+          })}
+        </div>
+        {/* search results */}
+        <div className="flex flex-col px-3 gap-2">
+          {listMedias?.map((r) => {
+            const topTag = allTags
+              ?.filter((t) => !!r.stats.votes[t.id])
+              .sort((a, b) => r.stats.votes[b.id] - r.stats.votes[a.id])
+              .at(0)
+            return (
+              <div
+                key={r.id}
+                className="p-3 bg-base-300 content-auto"
+                data-theme={getTheme(topTag)}
+              >
+                <div className="bg-base-300 relative roundnd flex flex-col min-h-38 w-full">
+                  {/* img */}
+                  {r.img ? (
+                    <div className="absolute inset-0 w-1/3">
+                      <img
+                        src={r.img}
+                        className="w-full h-full object-cover object-[50%_33%] brightness-130 rounded"
+                      />
                     </div>
-                    {/* tags */}
-                    <div className="w-full inline-flex gap-0.5">
-                      {allTags
-                        ?.filter((t) => !!r.stats.votes[t.id])
-                        .sort(
-                          (a, b) =>
-                            (r.stats.votes[b.id] ?? 0) -
-                            (r.stats.votes[a.id] ?? 0),
-                        )
-                        .map((t, idx) => {
-                          return (
+                  ) : null}
+                  {/* info */}
+                  <div className="z-10 leading-snug h-full flex gap-3">
+                    <div className="w-1/3 shrink-0" />
+                    <div className="flex flex-col justify-between w-full gap-1">
+                      <div className="flex flex-col gap-1">
+                        <div className="w-full">
+                          {/* title */}
+                          <button
+                            onClick={() => setSelectedMediaId(r.id)}
+                            className="text-left cursor-pointer"
+                          >
+                            <span className="text-2xl leading-tight text-left">
+                              {r.title}
+                            </span>
+                            {/* year */}
                             <MediaTag
-                              key={t.id}
-                              label={t.name}
-                              voteCount={r.stats.votes[t.id]}
-                              barCount={Math.floor(
-                                (1 -
-                                  wilson_score_lower(
-                                    r.stats.votes[t.id] ?? 0,
-                                    userCount ?? 0,
-                                  )) *
-                                  3,
-                              )}
-                              primary={idx === 0}
+                              className="text-neutral-600! mx-1"
+                              labelClassName="bg-neutral-300"
+                              label={r.year}
                             />
+                          </button>
+                        </div>
+                        <div className="inline-flex gap-1">
+                          {/* urls */}
+                          {r.imdb_url ? (
+                            <Link to={r.imdb_url}>
+                              <MediaTag label="IMDB" small />
+                            </Link>
+                          ) : null}
+                        </div>
+                      </div>
+                      {/* tags */}
+                      <div className="w-full inline-flex gap-0.5">
+                        {allTags
+                          ?.filter((t) => !!r.stats.votes[t.id])
+                          .sort(
+                            (a, b) =>
+                              (r.stats.votes[b.id] ?? 0) -
+                              (r.stats.votes[a.id] ?? 0),
                           )
-                        })}
+                          .map((t, idx) => {
+                            return (
+                              <MediaTag
+                                key={t.id}
+                                label={t.name}
+                                voteCount={r.stats.votes[t.id]}
+                                barCount={Math.floor(
+                                  (1 -
+                                    wilson_score_lower(
+                                      r.stats.votes[t.id] ?? 0,
+                                      userCount ?? 0,
+                                    )) *
+                                    3,
+                                )}
+                                primary={idx === 0}
+                              />
+                            )
+                          })}
+                      </div>
                     </div>
                   </div>
                 </div>
               </div>
-            </div>
-          )
-        })}
+            )
+          })}
+        </div>
+        {selectedMedia ? (
+          <MediaDialog
+            media={selectedMedia}
+            onClose={() => setSelectedMediaId(undefined)}
+          />
+        ) : null}
       </div>
-      {selectedMedia ? (
-        <MediaDialog
-          media={selectedMedia}
-          onClose={() => setSelectedMediaId(undefined)}
-        />
-      ) : null}
     </div>
   )
 }
@@ -300,6 +366,7 @@ type MediaTagProps = {
   checked?: boolean
   primary?: boolean
   isLoading?: boolean
+  icon?: ReactNode
 }
 
 const MediaTag = ({
@@ -312,10 +379,11 @@ const MediaTag = ({
   checked,
   primary,
   isLoading,
+  icon,
 }: MediaTagProps) => (
   <div
     className={cx(
-      "inline-flex gap-0.5",
+      "inline-flex gap-0.5 transition-all",
       small && "text-sm",
       primary ? "text-primary-content" : "text-neutral-content",
       className,
@@ -324,7 +392,7 @@ const MediaTag = ({
     <div
       className={cx(
         small ? "px-1" : "py-0.5 px-1.5",
-        "h-full flex items-center gap-0.5",
+        "h-full flex items-center gap-0.5 transition-all",
         primary ? "bg-primary" : "bg-neutral",
         labelClassName,
       )}
@@ -333,7 +401,9 @@ const MediaTag = ({
         <FiLoader className="animate-spin stroke-2" />
       ) : checked ? (
         <FiCheck className="stroke-2" />
-      ) : null}
+      ) : (
+        icon
+      )}
       <span className="capitalize">{label}</span>
       {voteCount && voteCount > 1 ? <span>{voteCount}</span> : null}
     </div>
@@ -341,7 +411,7 @@ const MediaTag = ({
       <div
         key={i}
         className={cx(
-          "w-2 h-full",
+          "w-2 h-full transition-all",
           primary ? "bg-primary" : "bg-neutral",
           labelClassName,
         )}
