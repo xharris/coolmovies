@@ -171,6 +171,11 @@ def media_remove_tag(media_id: str, tag_id: str, current_user: Annotated[str,Dep
     update_media_stats(media)
     log.info("media remove tag: %s", res)
 
+@app.get("/api/user/count")
+def user_count():
+    user_repo = model.UserRepo(db)
+    return user_repo.get_collection().count_documents()
+
 @app.get("/api/auth/check")
 def auth_check(user_id: Annotated[str, DependsCurrentUser]):
     return str(user_id)
