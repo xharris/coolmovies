@@ -14,6 +14,7 @@ import {
   useState,
   type ReactNode,
 } from "react"
+import { createPortal } from "react-dom"
 import { cx } from "./classnameswrap"
 import {
   createBrowserRouter,
@@ -21,12 +22,12 @@ import {
   RouterProvider,
   useSearchParams,
 } from "react-router"
-import { FiCheck, FiLoader, FiMenu, FiX } from "react-icons/fi"
+import { FiAlertCircle, FiCheck, FiLoader, FiMenu, FiX } from "react-icons/fi"
 import { useForm } from "react-hook-form"
 import { useDebounceValue, useLocalStorage } from "usehooks-ts"
 import { api } from "./api"
 import { wilson_score_lower } from "./math2"
-import { FaTag } from "react-icons/fa"
+import type { VantaEffect } from "vanta"
 
 type Media = {
   id: string
@@ -68,7 +69,16 @@ const tagNameToTheme: Record<string, string> = {
   trippy: "synthwave",
   confusing: "sunset",
   relaxing: "coffee",
+  wild: "cyberpunk",
 }
+const tagDescription: Record<string, string> = {
+  relaxing: "You may fall asleep",
+  gross: "Made you queasy",
+  wild: "You may explode",
+  funny: "Peed your pants",
+  scary: "Not for the faint of heart",
+}
+
 const getTheme = (tag?: Tag) =>
   tag && tagNameToTheme[tag.name] ? tagNameToTheme[tag.name] : undefined
 
@@ -78,9 +88,11 @@ export const useAllTags = () =>
   useQuery({
     queryKey: ["tag"],
     queryFn: () => api.get("/tag/all").json<Tag[]>(),
+    placeholderData: keepPreviousData,
   })
 
 const App = () => {
+  const appRef = useRef<HTMLDivElement>(null)
   const { data: userRoles } = useQuery({
     queryKey: ["user_role"],
     queryFn: () => api.get("/user/roles").json<UserRole[]>(),
@@ -160,9 +172,51 @@ const App = () => {
   const { register, handleSubmit } = useForm<AddTagBody>({
     values: { tagName: "" },
   })
+  useEffect(() => {
+    // add bg fog effect
+    // https://www.vantajs.com/?effect=fog#(backgroundAlpha:1,baseColor:657930,blurFactor:0.18,gyroControls:!f,highlightColor:4604996,lowlightColor:2763306,midtoneColor:3947580,minHeight:200,minWidth:200,mouseControls:!t,scale:2,scaleMobile:4,speed:1,touchControls:!t,zoom:1)
+    let isDisposed = false
+    let effect: VantaEffect | undefined
+    ;(async () => {
+      const THREE = await import("three")
+      const vantaWindow = window as Window & {
+        THREE?: unknown
+        VANTA?: { FOG?: (options: Record<string, unknown>) => VantaEffect }
+      }
+      vantaWindow.THREE = THREE
+
+      await import("vanta/dist/vanta.fog.min")
+      const fogFactory = vantaWindow.VANTA?.FOG
+
+      if (!isDisposed && appRef.current && typeof fogFactory === "function") {
+        effect = fogFactory({
+          el: appRef.current,
+          mouseControls: true,
+          touchControls: true,
+          gyroControls: false,
+          minHeight: 200.0,
+          minWidth: 200.0,
+          highlightColor: 0x878686,
+          midtoneColor: 0x3c3c3c,
+          lowlightColor: 0x2a2a2a,
+          baseColor: 0x50505,
+          blurFactor: 0.18,
+        })
+      }
+    })()
+
+    return () => {
+      isDisposed = true
+      effect?.destroy()
+    }
+  }, [])
 
   return (
-    <div className="overflow-y-auto overflow-x-hidden" data-theme="black">
+    <div
+      id="app"
+      ref={appRef}
+      className="overflow-y-auto overflow-x-hidden absolute inset-0"
+    >
       <div className="mx-auto md:max-w-2xl w-full absolute inset-0 flex flex-col gap-3">
         <div className="navbar gap-2 pb-0">
           <div className="navbar-start flex-0">
@@ -234,6 +288,7 @@ const App = () => {
             const isEnabled = !mediaFilter.excludeTags.includes(t.id)
             return (
               <button
+                key={t.id}
                 className="cursor-pointer"
                 onClick={() =>
                   setMediaFilter((prev) => ({
@@ -256,14 +311,16 @@ const App = () => {
             )
           })}
         </div>
-        {/* search results */}
+        {/* list medias */}
         <div className="flex flex-col px-3 gap-2">
           {listMedias?.map((r) => {
+            const notReleased = r.year > new Date().getFullYear()
             const topTag = allTags
               ?.filter((t) => !!r.stats.votes[t.id])
               .sort((a, b) => r.stats.votes[b.id] - r.stats.votes[a.id])
               .at(0)
             return (
+              // media card
               <div
                 key={r.id}
                 className="p-3 bg-base-300 content-auto"
@@ -288,7 +345,11 @@ const App = () => {
                           {/* title */}
                           <button
                             onClick={() => setSelectedMediaId(r.id)}
-                            className="text-left cursor-pointer"
+                            className={cx(
+                              "text-left",
+                              !notReleased && "cursor-pointer",
+                            )}
+                            disabled={notReleased}
                           >
                             <span className="text-2xl leading-tight text-left">
                               {r.title}
@@ -307,6 +368,14 @@ const App = () => {
                             <Link to={r.imdb_url}>
                               <MediaTag label="IMDB" small />
                             </Link>
+                          ) : null}
+                          {/* not released */}
+                          {notReleased ? (
+                            <MediaTag
+                              label="Coming Soon"
+                              small
+                              icon={<FiAlertCircle />}
+                            />
                           ) : null}
                         </div>
                       </div>
@@ -345,12 +414,15 @@ const App = () => {
             )
           })}
         </div>
-        {selectedMedia ? (
-          <MediaDialog
-            media={selectedMedia}
-            onClose={() => setSelectedMediaId(undefined)}
-          />
-        ) : null}
+        {selectedMedia
+          ? createPortal(
+              <MediaDialog
+                media={selectedMedia}
+                onClose={() => setSelectedMediaId(undefined)}
+              />,
+              document.body,
+            )
+          : null}
       </div>
     </div>
   )
@@ -358,6 +430,7 @@ const App = () => {
 
 type MediaTagProps = {
   label: ReactNode
+  description?: string
   labelClassName?: string
   barCount?: number
   className?: string
@@ -371,6 +444,7 @@ type MediaTagProps = {
 
 const MediaTag = ({
   label,
+  description,
   labelClassName,
   barCount = 0,
   className,
@@ -391,20 +465,27 @@ const MediaTag = ({
   >
     <div
       className={cx(
-        small ? "px-1" : "py-0.5 px-1.5",
-        "h-full flex items-center gap-0.5 transition-all",
+        small ? "px-1 py-0.5" : "py-0.5 px-1.5",
+        "flex-1 h-full flex items-center gap-0.5 transition-all",
         primary ? "bg-primary" : "bg-neutral",
         labelClassName,
       )}
     >
-      {isLoading ? (
-        <FiLoader className="animate-spin stroke-2" />
-      ) : checked ? (
-        <FiCheck className="stroke-2" />
-      ) : (
-        icon
-      )}
-      <span className="capitalize">{label}</span>
+      <div className="flex flex-col items-start text-left flex-1">
+        <div className="flex items-center gap-0.5">
+          {isLoading ? (
+            <FiLoader className="animate-spin stroke-2" />
+          ) : checked ? (
+            <FiCheck className="stroke-2" />
+          ) : (
+            icon
+          )}
+          <span className="capitalize">{label}</span>
+        </div>
+        {!!description?.length ? (
+          <span className="text-sm leading-none">{description}</span>
+        ) : null}
+      </div>
       {voteCount && voteCount > 1 ? <span>{voteCount}</span> : null}
     </div>
     {new Array(barCount).fill(0).map((_, i) => (
@@ -441,8 +522,9 @@ const MediaDialog = ({ media, onClose }: MediaDialogProps) => {
   return (
     <dialog ref={ref} id="media-dialog" className="modal" onClose={onClose}>
       <div className="modal-box flex flex-col gap-2">
-        <h3 className="text-xl">{media.title}</h3>
-        <div className="inline-flex gap-2 flex-wrap">
+        <h3 className="text-3xl">{media.title}</h3>
+        <h4 className="text-sm italic">Select tags to add</h4>
+        <div className="grid grid-cols-2 gap-2">
           {/* vote on tags */}
           {allTags?.map((t) => {
             const hasVoted = tagVotes?.some(
@@ -454,8 +536,10 @@ const MediaDialog = ({ media, onClose }: MediaDialogProps) => {
                 media={media}
                 tag={t}
                 mediaTagProps={{
-                  className: "text-4xl",
+                  className: "text-4xl w-full h-full items-start",
                   checked: hasVoted,
+                  primary: hasVoted,
+                  description: tagDescription[t.name],
                 }}
                 hasVoted={hasVoted}
               />

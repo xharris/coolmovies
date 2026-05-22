@@ -1,6 +1,6 @@
 import wretch from "wretch"
 
-export const api = wretch("http://localhost:8000/api", {
+export const api = wretch(import.meta.env.VITE_API_URL ?? "/api", {
   credentials: "include",
   mode: "cors",
 })

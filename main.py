@@ -1,5 +1,7 @@
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
+from contextlib import asynccontextmanager
 from pkg import client, model, env, auth, math2
 from pymongo import MongoClient
 from typing import List, Dict, Annotated
@@ -7,16 +9,44 @@ from pydantic import BaseModel
 from os import environ
 from logging import getLogger, basicConfig, INFO
 from pydantic_mongo import PydanticObjectId
+import os
+
+DEFAULT_TAGS = ['scary', 'relaxing', 'trippy', 'confusing', 'funny']
 
 basicConfig()
 log = getLogger(__name__)
 log.setLevel(INFO)
 
-app = FastAPI()
-origins = [
-    "http://localhost",
-    "http://localhost:5173"
-]
+db_client = MongoClient(environ.get("MONGODB_URL"))
+db = db_client.get_database(environ.get("MONGODB_NAME"))
+DependsCurrentUser = auth.make_depends_user(db)
+
+SYSTEM_USER_ID = PydanticObjectId("000000000000000000000000")
+
+def migrate():
+    media_repo = model.MediaRepo(db)
+    # missing Media.stats
+    medias: List[model.Media] = list(media_repo.find_by({"stats": {"$exists": False}}))
+    media_repo.save_many(medias)
+    # seed default tags
+    tag_repo = model.TagRepo(db)
+    for name in DEFAULT_TAGS:
+        if not tag_repo.find_one_by({"name": name}):
+            tag_repo.save(model.Tag(name=name, created_by=SYSTEM_USER_ID))
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    migrate()
+    yield
+
+app = FastAPI(lifespan=lifespan)
+
+_cors_env = environ.get("CORS_ORIGINS", "")
+origins = (
+    [o.strip() for o in _cors_env.split(",") if o.strip()]
+    if _cors_env
+    else ["http://localhost", "http://localhost:5173"]
+)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=origins,
@@ -24,16 +54,6 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"]
 )
-
-db_client = MongoClient(environ.get("MONGODB_URL"))
-db = db_client.get_database(environ.get("MONGODB_NAME"))
-DependsCurrentUser = auth.make_depends_user(db)
-
-def migrate():
-    media_repo = model.MediaRepo(db)
-    # missing Media.stats
-    medias: List[model.Media] = list(media_repo.find_by({"stats": {"$exists": False}}))
-    media_repo.save_many(medias)
 
 
 def update_media_stats(media: model.Media):
@@ -101,10 +121,6 @@ def media_search(body: MediaSearchBody):
         res.raise_for_status()
     except Exception as e:
         log.error("could not search thegamesdb: %s", e)
-    if res.is_success:
-        data = res.json()
-        for item in data:
-            print(item)
     # store in db
     repo = model.MediaRepo(db)
     medias: List[model.Media] = []
@@ -127,8 +143,9 @@ def tag_all():
 def tag_add(name: str, current_user: Annotated[str,DependsCurrentUser]):
     # check user user role
     user_repo = model.UserRepo(db)
-    user = user_repo.find_one_by_id(current_user)
+    user = user_repo.find_one_by_id(PydanticObjectId(current_user))
     if not user or not model.UserRole.admin in user.roles:
+        log.info("invalid roles: %s", user.roles if user else None)
         raise HTTPException(401)
     name = name.lower()
     tag_repo = model.TagRepo(db)
@@ -216,11 +233,12 @@ def user_roles(current_user: Annotated[str,DependsCurrentUser]):
     return user.roles
 
 @app.get("/api/auth/check")
-def auth_check(user_id: Annotated[str, DependsCurrentUser]):
-    return str(user_id)
-
-migrate()
+def auth_check(current_user: Annotated[str, DependsCurrentUser]):
+    return str(current_user)
 
 if __name__ == '__main__':
-    # get_media_search(MediaSearchBody(query="person of"))
     pass
+
+_dist_dir = os.path.join(os.path.dirname(__file__), "web", "dist")
+if os.path.isdir(_dist_dir):
+    app.mount("/", StaticFiles(directory=_dist_dir, html=True), name="static")

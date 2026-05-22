@@ -1,6 +1,7 @@
 from fastapi import Depends, Request, Response
 from logging import getLogger
 from jwt import encode, decode
+from os import getenv
 from pydantic import BaseModel
 from pydantic_mongo import PydanticObjectId
 from pymongo.database import Database
@@ -27,7 +28,8 @@ def make_depends_user(db: Database):
             # create session token data
             token = SessionToken(id=user.id)
             encoded = encode(token.model_dump(mode="json"), SECRET_KEY, algorithm=ALGORITHM)
-            resp.set_cookie(SESSION_TOKEN_COOKIE, encoded, httponly=True, samesite="lax")
+            is_secure = getenv("PRODUCTION", "").lower() in ("1", "true")
+            resp.set_cookie(SESSION_TOKEN_COOKIE, encoded, httponly=True, samesite="lax", secure=is_secure)
             return user.id
         
         # decode token

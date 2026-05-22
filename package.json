@@ -5,7 +5,9 @@
   "main": "index.js",
   "scripts": {
     "main": "UV_ENV_FILE=.env uv run -m main",
-    "dev": "concurrently 'UV_ENV_FILE=.env uv run fastapi dev' 'cd web && pnpm dev'"
+    "dev": "concurrently 'UV_ENV_FILE=.env uv run fastapi dev' 'cd web && pnpm dev'",
+    "build": "cd web && pnpm install --frozen-lockfile && pnpm build",
+    "deploy": "pnpm run build && fly deploy"
   },
   "keywords": [],
   "author": "",
