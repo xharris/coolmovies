@@ -36,13 +36,15 @@ def migrate():
     media_repo.save_many(medias)
     # seed default tags
     tag_repo = model.TagRepo(db)
+    tag_repo.ensure_indexes()
     for name in DEFAULT_TAGS:
         if not tag_repo.find_one_by({"name": name}):
             tag_repo.save(model.Tag(name=name, created_by=SYSTEM_USER_ID))
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    migrate()
+    if not environ.get("PRODUCTION"):
+        migrate()
     yield
 
 app = FastAPI(lifespan=lifespan)

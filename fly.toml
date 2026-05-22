@@ -9,6 +9,9 @@ primary_region = 'iad'
 [build]
   dockerfile = 'Dockerfile'
 
+[deploy]
+  release_command = "uv run python -c 'from main import migrate; migrate()'"
+
 [env]
   PORT = '8000'
   PRODUCTION = 'true'

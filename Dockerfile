@@ -15,4 +15,4 @@ RUN uv sync --frozen --no-dev
 COPY main.py ./
 COPY pkg/ ./pkg/
 COPY --from=frontend /app/web/dist ./web/dist
-CMD ["uv", "run", "fastapi", "run", "main.py", "--host", "0.0.0.0", "--port", "8000"]
+CMD ["uv", "run", "uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000"]

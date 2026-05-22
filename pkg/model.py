@@ -62,7 +62,10 @@ class Tag(BaseModel):
 class TagRepo(AbstractRepository[Tag]):
     class Meta:
         collection_name = 'tags'
-    
+
+    def ensure_indexes(self):
+        self.get_collection().create_index("name", unique=True)
+
     def all(self) -> List[Tag]:
         return list(self.find_by({}))
 
