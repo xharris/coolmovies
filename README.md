@@ -14,19 +14,12 @@
 
 ## TODO
 
-- [ ] Api
-  - [ ] Anonymous account cookie
-    - [ ] UUID
-    - [ ] session cookie
-  - [ ] Search media
-    - [x] movie/show db
-    - [ ] anime db
-    - [ ] game db
-    - [ ] Store media in DB: src(url), img, title, description
-  - [ ] Vote on tag for media
-    - [ ] Look into:
-      - [ ] IP rate limiting with redis
-      - [ ] signed session token
+- [ ] IP rate limiting with redis
+- [ ] Add 'theme' field to Tag (for data-theme)
+- [ ] Add 'description' field to Tag
+- [ ] UI tag editor
+- [ ] Sort homepage medias by year
+- [ ] Figure out how to resolve duplicate entries in IMDB/game db (also hook up game db)
 
 ## AI Notes
 

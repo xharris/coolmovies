@@ -70,13 +70,15 @@ const tagNameToTheme: Record<string, string> = {
   confusing: "sunset",
   relaxing: "coffee",
   wild: "cyberpunk",
+  funny: "night",
 }
 const tagDescription: Record<string, string> = {
-  relaxing: "You may fall asleep",
+  relaxing: "You may become cozy or fall asleep",
   gross: "Made you queasy",
-  wild: "You may explode",
-  funny: "Peed your pants",
+  wild: "You may suddenly explode",
+  funny: "Silly or made you pee your pants",
   scary: "Not for the faint of heart",
+  confusing: "Where am I?",
 }
 
 const getTheme = (tag?: Tag) =>
@@ -282,7 +284,7 @@ const App = () => {
           </div>
         </div>
         {/* filters */}
-        <div className="inline-flex gap-2 px-3">
+        <div className="inline-flex gap-2 px-3 flex-wrap">
           <MediaTag label="Filters" className="opacity-50" />
           {allTags?.map((t) => {
             const isEnabled = !mediaFilter.excludeTags.includes(t.id)
@@ -380,7 +382,7 @@ const App = () => {
                         </div>
                       </div>
                       {/* tags */}
-                      <div className="w-full inline-flex gap-0.5">
+                      <div className="w-full inline-flex gap-0.5 flex-wrap">
                         {allTags
                           ?.filter((t) => !!r.stats.votes[t.id])
                           .sort(
