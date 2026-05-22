@@ -20,6 +20,10 @@
 - [ ] UI tag editor
 - [ ] Sort homepage medias by year
 - [ ] Figure out how to resolve duplicate entries in IMDB/game db (also hook up game db)
+- [ ] Use tag themes in add/remove tag form?
+- [ ] Log into existing account using sync code/QR code from another device?
+  - [ ] Update created_by of other docs
+  - [ ] Remove old account
 
 ## AI Notes
 

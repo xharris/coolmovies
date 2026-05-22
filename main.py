@@ -1,4 +1,4 @@
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from contextlib import asynccontextmanager
@@ -10,6 +10,8 @@ from os import environ
 from logging import getLogger, basicConfig, INFO
 from pydantic_mongo import PydanticObjectId
 import os
+from slowapi import Limiter, _rate_limit_exceeded_handler
+from slowapi.errors import RateLimitExceeded
 
 DEFAULT_TAGS = ['scary', 'relaxing', 'trippy', 'confusing', 'funny']
 
@@ -17,6 +19,10 @@ basicConfig()
 log = getLogger(__name__)
 log.setLevel(INFO)
 
+def get_real_ip(request: Request) -> str:
+    return request.headers.get("x-forwarded-for", request.client.host).split(",")[0].strip()
+
+limiter = Limiter(key_func=get_real_ip)
 db_client = MongoClient(environ.get("MONGODB_URL"))
 db = db_client.get_database(environ.get("MONGODB_NAME"))
 DependsCurrentUser = auth.make_depends_user(db)
@@ -40,6 +46,8 @@ async def lifespan(app: FastAPI):
     yield
 
 app = FastAPI(lifespan=lifespan)
+app.state.limiter = limiter
+app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 
 _cors_env = environ.get("CORS_ORIGINS", "")
 origins = (
@@ -152,7 +160,7 @@ def tag_add(name: str, current_user: Annotated[str,DependsCurrentUser]):
     tag = tag_repo.find_one_by({"name": name})
     if not tag:
         log.info("create new tag")
-        tag = model.Tag(name=name, created_by=current_user)
+        tag = model.Tag(name=name, created_by=PydanticObjectId(current_user))
         tag_repo.save(tag)
         return str(tag.id)
     return str(tag.id)
@@ -171,7 +179,8 @@ def media_tag_votes(media_id: str, current_user: Annotated[str,DependsCurrentUse
     }))
 
 @app.put("/api/media/{media_id}/addtag/{tag_id}")
-def media_add_tag(media_id: str, tag_id: str, current_user: Annotated[str,DependsCurrentUser]):
+@limiter.limit("10/minute")
+def media_add_tag(req: Request, media_id: str, tag_id: str, current_user: Annotated[str,DependsCurrentUser]):
     media_repo = model.MediaRepo(db)
     tag_repo = model.TagRepo(db)
     tag_vote_repo = model.TagVoteRepo(db)
@@ -200,7 +209,8 @@ def media_add_tag(media_id: str, tag_id: str, current_user: Annotated[str,Depend
     log.info("media add tag: %s", res)
 
 @app.put("/api/media/{media_id}/removetag/{tag_id}")
-def media_remove_tag(media_id: str, tag_id: str, current_user: Annotated[str,DependsCurrentUser]):
+@limiter.limit("10/minute")
+def media_remove_tag(req: Request, media_id: str, tag_id: str, current_user: Annotated[str,DependsCurrentUser]):
     media_repo = model.MediaRepo(db)
     tag_repo = model.TagRepo(db)
     tag_vote_repo = model.TagVoteRepo(db)
