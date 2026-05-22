@@ -22,7 +22,14 @@ import {
   RouterProvider,
   useSearchParams,
 } from "react-router"
-import { FiAlertCircle, FiCheck, FiLoader, FiMenu, FiX } from "react-icons/fi"
+import {
+  FiAlertCircle,
+  FiCheck,
+  FiLoader,
+  FiMenu,
+  FiMinus,
+  FiX,
+} from "react-icons/fi"
 import { useForm } from "react-hook-form"
 import { useDebounceValue, useLocalStorage } from "usehooks-ts"
 import { api } from "./api"
@@ -68,8 +75,8 @@ const tagNameToTheme: Record<string, string> = {
   scary: "abyss",
   trippy: "synthwave",
   confusing: "sunset",
-  relaxing: "coffee",
   wild: "cyberpunk",
+  relaxing: "coffee",
   funny: "night",
 }
 const tagDescription: Record<string, string> = {
@@ -79,10 +86,16 @@ const tagDescription: Record<string, string> = {
   funny: "Silly or made you pee your pants",
   scary: "Not for the faint of heart",
   confusing: "Where am I?",
+  trippy: "My brain hurts",
 }
 
 const getTheme = (tag?: Tag) =>
   tag && tagNameToTheme[tag.name] ? tagNameToTheme[tag.name] : undefined
+
+const useMediaFilter = () =>
+  useLocalStorage("media-fiter", {
+    excludeTags: [] as string[],
+  })
 
 const queryClient = new QueryClient()
 
@@ -93,8 +106,24 @@ export const useAllTags = () =>
     placeholderData: keepPreviousData,
   })
 
+const SEARCH_PLACEHOLDERS = [
+  "Search for stuff...",
+  "Find something else...",
+  "What are we watching tonight...?",
+  "Search for a vibe...",
+  // "Find something to keep you up...",
+  // "Looking for something trippy?",
+  // "What are we playing tonight?",
+]
+
 const App = () => {
   const appRef = useRef<HTMLDivElement>(null)
+  const searchPlaceholder = useState(
+    () =>
+      SEARCH_PLACEHOLDERS[
+        Math.floor(Math.random() * SEARCH_PLACEHOLDERS.length)
+      ],
+  )[0]
   const { data: userRoles } = useQuery({
     queryKey: ["user_role"],
     queryFn: () => api.get("/user/roles").json<UserRole[]>(),
@@ -109,9 +138,7 @@ const App = () => {
     queryFn: () => api.get("/user/count").text().then(parseInt),
   })
   // media tag filter
-  const [mediaFilter, setMediaFilter] = useLocalStorage("media-fiter", {
-    excludeTags: [] as string[],
-  })
+  const [mediaFilter, setMediaFilter] = useMediaFilter()
   // search query
   const [params, setParams] = useSearchParams({ q: "" })
   const [query, setQueryState] = useState(() => params.get("q") ?? "")
@@ -165,6 +192,9 @@ const App = () => {
       searchResults?.find((m) => m.id === selectedMediaId),
     [selectedMediaId, listMedias, searchResults],
   )
+  useEffect(() => {
+    if (selectedMediaId && !selectedMedia) setSelectedMediaId(undefined)
+  }, [selectedMedia, selectedMediaId])
   // api: add tag
   const { mutateAsync: addTag } = useMutation({
     mutationFn: (body: AddTagBody) =>
@@ -198,11 +228,12 @@ const App = () => {
           gyroControls: false,
           minHeight: 200.0,
           minWidth: 200.0,
-          highlightColor: 0x878686,
-          midtoneColor: 0x3c3c3c,
+          highlightColor: 0xa6a1a1,
+          midtoneColor: 0x606060,
           lowlightColor: 0x2a2a2a,
-          baseColor: 0x50505,
+          baseColor: 0xa0a0a,
           blurFactor: 0.18,
+          zoom: 0.4,
         })
       }
     })()
@@ -212,6 +243,18 @@ const App = () => {
       effect?.destroy()
     }
   }, [])
+  const enabledFiltersStatus = useMemo(() => {
+    if (!allTags?.length) {
+      return "none"
+    }
+    if (mediaFilter.excludeTags.length === 0) {
+      return "all"
+    }
+    if (mediaFilter.excludeTags.length === allTags.length) {
+      return "none"
+    }
+    return "some"
+  }, [mediaFilter, allTags])
 
   return (
     <div
@@ -219,17 +262,17 @@ const App = () => {
       ref={appRef}
       className="overflow-y-auto overflow-x-hidden absolute inset-0"
     >
-      <div className="mx-auto md:max-w-2xl w-full absolute inset-0 flex flex-col gap-3">
+      <div className="mx-auto md:max-w-3xl w-full absolute inset-0 flex flex-col gap-3">
         <div className="navbar gap-2 pb-0">
           <div className="navbar-start flex-0">
             <button
               className={cx(
-                "btn btn-ghost text-lg uppercase",
+                "btn btn-ghost text-lg uppercase w-38",
                 isSearching && "text-primary animate-pulse",
               )}
               onClick={() => setQuery("")}
             >
-              coolmovies420
+              {isSearching ? `coolmovies420` : `coolmovies4u`}
             </button>
           </div>
           <div className="navbar-center flex-1 gap-2">
@@ -237,7 +280,7 @@ const App = () => {
             <input
               className="input flex-1 transition-all"
               type="text"
-              placeholder="Search for stuff..."
+              placeholder={searchPlaceholder}
               value={query}
               onChange={(e) => setQuery(e.target.value)}
             />
@@ -255,7 +298,11 @@ const App = () => {
             <dialog id="menu" className="modal">
               <div className="modal-box">
                 <h3 className="text-lg font-bold">About</h3>
-                <p>Search for movies, shows, anime, and games using vibes.</p>
+                <p className="text-4xl">
+                  {
+                    "Search for movies, shows, and anime using vibes. Games to be added soon."
+                  }
+                </p>
                 <p>xhh © 2026</p>
                 {/* add tag form */}
                 {userRoles?.includes("admin") ? (
@@ -285,7 +332,31 @@ const App = () => {
         </div>
         {/* filters */}
         <div className="inline-flex gap-2 px-3 flex-wrap">
-          <MediaTag label="Filters" className="opacity-50" />
+          <button
+            className="cursor-pointer"
+            disabled={!allTags?.length}
+            onClick={() =>
+              enabledFiltersStatus === "none" || enabledFiltersStatus === "some"
+                ? setMediaFilter({ excludeTags: [] })
+                : setMediaFilter({
+                    excludeTags: allTags?.map((t) => t.id) ?? [],
+                  })
+            }
+          >
+            <MediaTag
+              label="Filters"
+              className="opacity-50"
+              checked={enabledFiltersStatus === "all"}
+              icon={
+                enabledFiltersStatus === "some" ? (
+                  <FiMinus />
+                ) : enabledFiltersStatus === "none" ? (
+                  <FiX />
+                ) : undefined
+              }
+            />
+          </button>
+
           {allTags?.map((t) => {
             const isEnabled = !mediaFilter.excludeTags.includes(t.id)
             return (
@@ -603,6 +674,7 @@ const MediaTagVoteButton = ({
           : addMediaTag({ mediaId: media.id, tagId: tag.id })
       }
       disabled={isPending}
+      data-theme={!!media.stats.votes[tag.id] ? getTheme(tag) : undefined}
     >
       <MediaTag
         {...mediaTagProps}

@@ -14,6 +14,8 @@
 
 ## TODO
 
+- [ ] 'Seen it' toggle (moves it to bottom of list)
+  - [ ] Also add filter
 - [ ] IP rate limiting with redis
 - [ ] Add 'theme' field to Tag (for data-theme)
 - [ ] Add 'description' field to Tag
