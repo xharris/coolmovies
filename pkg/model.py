@@ -1,13 +1,18 @@
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from bson import ObjectId
 from pydantic_mongo import AbstractRepository, PydanticObjectId
-from typing import List, Optional
+from typing import List, Optional, Dict
 from httpx import Client
 
 class Media(BaseModel):
+    class Stats(BaseModel):
+        votes: Dict[str, int] = Field(default_factory=dict)
+        '''tag votes — keys are tag id strings'''
+
     id: PydanticObjectId = None
     title: str
     year: int
+    stats: Stats = Field(default_factory=Stats)
     img: str = None
     imdb_id: Optional[str] = None
     imdb_url: Optional[str] = None
@@ -26,6 +31,11 @@ class MediaRepo(AbstractRepository[Media]):
             Media(**doc) 
             for doc in self.get_collection().aggregate(pipeline)
         ]
+    
+    def find_one_by_id(self, _id):
+        return self.find_one_by({
+            "$or": [{"_id": PydanticObjectId(_id)}, {"imdb_id": _id}],
+        })
 
 class User(BaseModel):
     id: PydanticObjectId = None
@@ -44,10 +54,10 @@ class TagRepo(AbstractRepository[Tag]):
         collection_name = 'tags'
     
     def all(self) -> List[Tag]:
-        return [
-            Tag(**doc)
-            for doc in self.get_collection().find()
-        ]
+        return list(self.find_by({}))
+
+    def find_one_by_id(self, _id):
+        return self.find_one_by({ "$or": [{ "tag": _id }, { "_id": PydanticObjectId(_id) }] })
     
 class TagVote(BaseModel):
     id: PydanticObjectId = None
@@ -68,11 +78,5 @@ class TagVoteRepo(AbstractRepository[TagVote]):
         return self.save(vote)
     
     def delete_vote(self, media: PydanticObjectId, tag: PydanticObjectId, created_by: PydanticObjectId):
-        votes = [
-            TagVote(**doc)
-            for doc in self.find_by({"media": media, "tag": tag, "created_by": created_by})
-        ]
-        return [
-            self.delete_by_id(v.id)
-            for v in votes
-        ]
+        votes = list(self.find_by({"media": media, "tag": tag, "created_by": created_by}))
+        return [self.delete_by_id(v.id) for v in votes]

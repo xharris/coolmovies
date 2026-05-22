@@ -5,12 +5,25 @@ import {
   useQuery,
 } from "@tanstack/react-query"
 import "./App.css"
-import { useEffect, useRef, useState, type ReactNode } from "react"
-import { ApiRequest } from "./api"
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type ReactNode,
+} from "react"
 import { cx } from "./classnameswrap"
-import { createBrowserRouter, Link, RouterProvider } from "react-router"
-import { FiCheck, FiMenu, FiPlus } from "react-icons/fi"
+import {
+  createBrowserRouter,
+  Link,
+  RouterProvider,
+  useSearchParams,
+} from "react-router"
+import { FiCheck, FiLoader, FiMenu, FiPlus } from "react-icons/fi"
 import { useForm } from "react-hook-form"
+import { useDebounceValue } from "usehooks-ts"
+import { api } from "./api"
 
 type Media = {
   id: string
@@ -19,6 +32,20 @@ type Media = {
   img?: string
   imdb_id?: string
   imdb_url?: string
+  stats: {
+    votes: Record<string, number>
+  }
+}
+
+type Tag = {
+  id: string
+  name: string
+}
+
+type TagVote = {
+  media: string
+  tag: string
+  created_by: string
 }
 
 type AddMediaTagBody = {
@@ -30,31 +57,62 @@ type AddTagBody = {
   tagName: string
 }
 
-const apiClient = new ApiRequest("http://localhost:8000/api/")
 const queryClient = new QueryClient()
 
+export const useAllTags = () =>
+  useQuery({
+    queryKey: ["tag"],
+    queryFn: () => api.get("/tag/all").json<Tag[]>(),
+  })
+
 const App = () => {
-  const [query, setQuery] = useState("")
+  const { data: allTags } = useAllTags()
+  const { data: allMedias } = useQuery({
+    queryKey: ["media"],
+    queryFn: () => api.get("/media/all").json<Media[]>(),
+  })
+  // search query
+  const [params, setParams] = useSearchParams({ q: "" })
+  const [query, setQueryState] = useState(() => params.get("q") ?? "")
+  const setQuery = useCallback((value: string) => {
+    setQueryState(value)
+    setParams(
+      (prev) => {
+        prev.set("q", value)
+        return prev
+      },
+      { replace: true },
+    )
+  }, [])
+  const [queryDebounced] = useDebounceValue(query, 200)
+  // search results
   const { data: searchResults } = useQuery({
-    queryKey: ["media_search", { query }],
+    queryKey: ["media_search", { query: queryDebounced }],
     queryFn: () =>
-      apiClient.post("media/search", { query }).response().json<Media[]>(),
-    enabled: !!query.length,
+      api.post({ query: queryDebounced }, "/media/search").json<Media[]>(),
+    enabled: !!queryDebounced.length,
   })
-  const [selectedMedia, setSelectedMedia] = useState<Media>()
-  // api: add to to media
-  const { mutateAsync: addMediaTag } = useMutation({
-    mutationFn: (body: AddMediaTagBody) =>
-      apiClient
-        .put(`media/${body.mediaId}/addtag/${body.tagId}`)
-        .response()
-        .json(),
-    onSuccess: () => queryClient.invalidateQueries(),
-  })
+  const [selectedMediaId, setSelectedMediaId] = useState<string>()
+  const listMedias = useMemo(() => {
+    let medias: Media[] = []
+    if (!!searchResults?.length) {
+      medias = searchResults
+    } else if (allMedias) {
+      medias = allMedias
+    }
+    return medias
+  }, [searchResults, allMedias])
+  const selectedMedia = useMemo(
+    () =>
+      listMedias.find((m) => m.id === selectedMediaId) ??
+      searchResults?.find((m) => m.id === selectedMediaId),
+    [selectedMediaId, listMedias, searchResults],
+  )
   // api: add tag
   const { mutateAsync: addTag } = useMutation({
     mutationFn: (body: AddTagBody) =>
-      apiClient.post(`tag/add/${body.tagName}`).response().do(),
+      api.url(`/tag/add/${body.tagName}`).post().res(),
+    onSuccess: () => queryClient.invalidateQueries(),
   })
   const { register, handleSubmit } = useForm<AddTagBody>({
     values: { tagName: "" },
@@ -115,12 +173,13 @@ const App = () => {
       {/* filters */}
       <div className="inline-flex gap-2 px-3">
         <MediaTag label="Filters" className="opacity-50" />
-        <MediaTag label="Scary" voteCount={34} checked primary />
-        <MediaTag label="Relaxing" voteCount={4200} />
+        {allTags?.map((t) => (
+          <MediaTag key={t.id} label={t.name} />
+        ))}
       </div>
       {/* search results */}
       <div className="flex flex-col px-3 gap-2">
-        {searchResults?.map((r) => (
+        {listMedias?.map((r) => (
           <div key={r.id} className="p-3 bg-base-300">
             <div className="bg-base-300 relative rounded flex flex-col min-h-24 w-full">
               {/* img */}
@@ -140,7 +199,7 @@ const App = () => {
                     <div className="w-full">
                       {/* title */}
                       <button
-                        onClick={() => setSelectedMedia(r)}
+                        onClick={() => setSelectedMediaId(r.id)}
                         className="text-left cursor-pointer"
                       >
                         <span className="text-2xl leading-tight text-left">
@@ -165,8 +224,20 @@ const App = () => {
                   </div>
                   {/* tags */}
                   <div className="w-full inline-flex gap-0.5">
-                    <MediaTag label="Scary" primary barCount={2} />
-                    <MediaTag label="Relaxing" barCount={1} voteCount={42} />
+                    {allTags
+                      ?.filter((t) => !!r.stats.votes[t.id])
+                      .sort(
+                        (a, b) =>
+                          (r.stats.votes[b.id] ?? 0) -
+                          (r.stats.votes[a.id] ?? 0),
+                      )
+                      .map((t) => (
+                        <MediaTag
+                          key={t.id}
+                          label={t.name}
+                          voteCount={r.stats.votes[t.id]}
+                        />
+                      ))}
                   </div>
                 </div>
               </div>
@@ -177,7 +248,7 @@ const App = () => {
       {selectedMedia ? (
         <MediaDialog
           media={selectedMedia}
-          onClose={() => setSelectedMedia(undefined)}
+          onClose={() => setSelectedMediaId(undefined)}
         />
       ) : null}
     </div>
@@ -193,6 +264,7 @@ type MediaTagProps = {
   small?: boolean
   checked?: boolean
   primary?: boolean
+  isLoading?: boolean
 }
 
 const MediaTag = ({
@@ -204,6 +276,7 @@ const MediaTag = ({
   small,
   checked,
   primary,
+  isLoading,
 }: MediaTagProps) => (
   <div
     className={cx(
@@ -221,21 +294,14 @@ const MediaTag = ({
         labelClassName,
       )}
     >
-      {checked ? <FiCheck className="stroke-2" /> : null}
-      <span>{label}</span>
-      {voteCount ? <span>{voteCount}</span> : null}
+      {isLoading ? (
+        <FiLoader className="animate-spin stroke-2" />
+      ) : checked ? (
+        <FiCheck className="stroke-2" />
+      ) : null}
+      <span className="capitalize">{label}</span>
+      {voteCount && voteCount > 1 ? <span>{voteCount}</span> : null}
     </div>
-    {/* {voteCount > 1 ? (
-      <div
-        className={cx(
-          labelClassName,
-          "h-full px-1.5 text-sm flex items-center justify-center",
-        )}
-      >
-        <FiPlus />
-        <span>{voteCount}</span>
-      </div>
-    ) : null} */}
     {new Array(barCount).fill(0).map((_, i) => (
       <div
         key={i}
@@ -256,25 +322,40 @@ type MediaDialogProps = {
 
 const MediaDialog = ({ media, onClose }: MediaDialogProps) => {
   const ref = useRef<HTMLDialogElement>(null)
+  const { data: allTags } = useAllTags()
+  const { data: tagVotes } = useQuery({
+    queryKey: ["tagvote", media.id],
+    queryFn: () => api.get(`/media/${media.id}/tagvotes`).json<TagVote[]>(),
+  })
   useEffect(() => {
     if (ref.current) {
       ref.current.showModal()
     }
   }, [ref])
+
   return (
     <dialog ref={ref} id="media-dialog" className="modal" onClose={onClose}>
       <div className="modal-box flex flex-col gap-2">
         <h3 className="text-xl">{media.title}</h3>
-        <div className="inline-flex gap-2">
-          {/* TODO vote on tags */}
-          <label className="label">
-            <input type="checkbox" hidden />
-            <MediaTag label="Scary" className="text-4xl" />
-          </label>
-          <label className="label">
-            <input type="checkbox" hidden />
-            <MediaTag label="Relaxing" className="text-4xl" primary checked />
-          </label>
+        <div className="inline-flex gap-2 flex-wrap">
+          {/* vote on tags */}
+          {allTags?.map((t) => {
+            const hasVoted = tagVotes?.some(
+              (v) => t.id === v.tag && media.id === v.media,
+            )
+            return (
+              <MediaTagVoteButton
+                key={t.id}
+                media={media}
+                tag={t}
+                mediaTagProps={{
+                  className: "text-4xl",
+                  checked: hasVoted,
+                }}
+                hasVoted={hasVoted}
+              />
+            )
+          })}
         </div>
         <div className="model-action">
           <form method="dialog" className="w-full flex justify-end">
@@ -283,6 +364,62 @@ const MediaDialog = ({ media, onClose }: MediaDialogProps) => {
         </div>
       </div>
     </dialog>
+  )
+}
+
+type MediaTagVoteButtonProps = {
+  media: Media
+  tag: Tag
+  mediaTagProps: Omit<MediaTagProps, "label">
+  hasVoted?: boolean
+}
+
+const MediaTagVoteButton = ({
+  media,
+  tag,
+  mediaTagProps,
+  hasVoted,
+}: MediaTagVoteButtonProps) => {
+  // api: add/remove tag from media
+  const { mutateAsync: addMediaTag, isPending: isAddMediaTagPending } =
+    useMutation({
+      mutationFn: (body: AddMediaTagBody) =>
+        api.url(`/media/${body.mediaId}/addtag/${body.tagId}`).put().res(),
+      onSettled: () => {
+        queryClient.invalidateQueries({ queryKey: ["tagvote", media.id] })
+        queryClient.invalidateQueries({ queryKey: ["media"] })
+        queryClient.invalidateQueries({ queryKey: ["media_search"] })
+      },
+    })
+  const { mutateAsync: removeMediaTag, isPending: isRemoveMediaTagPending } =
+    useMutation({
+      mutationFn: (body: AddMediaTagBody) =>
+        api.url(`/media/${body.mediaId}/removetag/${body.tagId}`).put().res(),
+      onSettled: () => {
+        queryClient.invalidateQueries({ queryKey: ["tagvote", media.id] })
+        queryClient.invalidateQueries({ queryKey: ["media"] })
+        queryClient.invalidateQueries({ queryKey: ["media_search"] })
+      },
+    })
+  const isPending = isAddMediaTagPending || isRemoveMediaTagPending
+
+  return (
+    <button
+      className={cx(isPending ? "opacity-50" : "cursor-pointer")}
+      onClick={() =>
+        hasVoted
+          ? removeMediaTag({ mediaId: media.id, tagId: tag.id })
+          : addMediaTag({ mediaId: media.id, tagId: tag.id })
+      }
+      disabled={isPending}
+    >
+      <MediaTag
+        {...mediaTagProps}
+        label={tag.name}
+        isLoading={isPending}
+        voteCount={media.stats.votes[tag.id] ?? 0}
+      />
+    </button>
   )
 }
 
