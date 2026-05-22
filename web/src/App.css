@@ -20,3 +20,8 @@
 @utility content-auto {
   content-visibility: auto;
 }
+
+.vanta-canvas {
+  position: fixed !important;
+  pointer-events: none;
+}

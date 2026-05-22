@@ -182,7 +182,7 @@ def media_tag_votes(media_id: str, current_user: Annotated[str,DependsCurrentUse
 
 @app.put("/api/media/{media_id}/addtag/{tag_id}")
 @limiter.limit("10/minute")
-def media_add_tag(req: Request, media_id: str, tag_id: str, current_user: Annotated[str,DependsCurrentUser]):
+def media_add_tag(request: Request, media_id: str, tag_id: str, current_user: Annotated[str,DependsCurrentUser]):
     media_repo = model.MediaRepo(db)
     tag_repo = model.TagRepo(db)
     tag_vote_repo = model.TagVoteRepo(db)
@@ -212,7 +212,7 @@ def media_add_tag(req: Request, media_id: str, tag_id: str, current_user: Annota
 
 @app.put("/api/media/{media_id}/removetag/{tag_id}")
 @limiter.limit("10/minute")
-def media_remove_tag(req: Request, media_id: str, tag_id: str, current_user: Annotated[str,DependsCurrentUser]):
+def media_remove_tag(request: Request, media_id: str, tag_id: str, current_user: Annotated[str,DependsCurrentUser]):
     media_repo = model.MediaRepo(db)
     tag_repo = model.TagRepo(db)
     tag_vote_repo = model.TagVoteRepo(db)
