@@ -151,12 +151,12 @@ def tag_all():
 
 @app.post("/api/tag/add/{name}")
 def tag_add(name: str, current_user: Annotated[str,DependsCurrentUser]):
-    # check user user role
+    # get user
     user_repo = model.UserRepo(db)
-    user = user_repo.find_one_by_id(PydanticObjectId(current_user))
-    if not user or not model.UserRole.admin in user.roles:
-        log.info("invalid roles: %s", user.roles if user else None)
+    user = user_repo.has_role_any(current_user, model.UserRole.admin)
+    if not user:
         raise HTTPException(401)
+    # add tag
     name = name.lower()
     tag_repo = model.TagRepo(db)
     tag = tag_repo.find_one_by({"name": name})
@@ -173,13 +173,19 @@ class TagEditBody(BaseModel):
     theme: Optional[str] = None
 
 @app.post("/api/tag/{id}")
-def tag_edit(id: str, body: TagEditBody):
+def tag_edit(id: str, body: TagEditBody, current_user: Annotated[str,DependsCurrentUser]):
+    # get user
+    user_repo = model.UserRepo(db)
+    user = user_repo.has_role_any(current_user, model.UserRole.admin)
+    if not user:
+        raise HTTPException(401)
+    # update tag
     tag_repo = model.TagRepo(db)
     tag = tag_repo.find_one_by_id(id)
     if not tag:
         raise HTTPException(404, "tag not found")
     if body.name:
-        tag.name = body.name
+        tag.name = body.name.lower()
     if body.description:
         tag.description = body.description
     tag.theme = body.theme

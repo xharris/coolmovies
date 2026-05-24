@@ -579,7 +579,7 @@ const MenuDialog = () => {
             <label className="select w-full">
               <span className="label">Theme</span>
               <select {...registerEditTag("theme")}>
-                {THEMES.map((theme) => (
+                {THEMES.sort().map((theme) => (
                   <option key={theme}>{theme}</option>
                 ))}
               </select>

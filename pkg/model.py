@@ -54,6 +54,15 @@ class UserRepo(AbstractRepository[User]):
     class Meta:
         collection_name = 'users'
 
+    def has_role_any(self, user_id: str, *roles: UserRole):
+        user = self.find_one_by_id(PydanticObjectId(user_id))
+        if not user:
+            return None
+        for role in roles:
+            if role in user.roles:
+                return user
+        return None
+
 class Tag(BaseModel):
     id: PydanticObjectId = None
     name: str
