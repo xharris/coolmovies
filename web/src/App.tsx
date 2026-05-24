@@ -229,6 +229,25 @@ const App = () => {
     }
     return "some"
   }, [mediaFilter, allTags])
+  const tagCounts = useMemo(() => {
+    const counts: Record<string, number> = {}
+    if (!allMedias || !allTags) {
+      return counts
+    }
+    for (const tag of allTags) {
+      const possibleMedias = allMedias.filter(
+        (m) =>
+          // has this tag
+          !!m.stats.votes[tag.id] &&
+          // has at least one tag that isn't excluded
+          Object.keys(m.stats.votes).some((id) => !!m.stats.votes[id] && !mediaFilter.excludeTags.includes(id)),
+      )
+      counts[tag.id] = mediaFilter.excludeTags.includes(tag.id)
+        ? possibleMedias.length
+        : listMedias.filter((m) => !!m.stats.votes[tag.id]).length
+    }
+    return counts
+  }, [allTags, allMedias, mediaFilter])
 
   return (
     <div id="app" ref={appRef} className="overflow-y-auto overflow-x-hidden absolute inset-0">
@@ -284,42 +303,36 @@ const App = () => {
               count={listMedias.length}
             />
           </button>
-          {allTags?.map((t) => {
-            const isEnabled = !mediaFilter.excludeTags.includes(t.id)
-            return (
-              <button
-                key={t.id}
-                className="cursor-pointer"
-                onClick={() =>
-                  setMediaFilter((prev) => ({
-                    ...prev,
-                    excludeTags: isEnabled ? [...prev.excludeTags, t.id] : prev.excludeTags.filter((id) => id !== t.id),
-                  }))
-                }
-                data-theme={isEnabled ? t.theme : undefined}
-              >
-                <MediaTag
-                  key={t.id}
-                  label={t.name}
-                  checked={isEnabled}
-                  primary={isEnabled}
-                  icon={!isEnabled ? <FiX /> : null}
-                  count={
-                    isEnabled
-                      ? listMedias.filter((m) => (m.stats.votes[t.id] ?? 0) > 0).length
-                      : (query.length ? searchResults ?? [] : allMedias ?? []).filter(
-                          (m) =>
-                            (m.stats.votes[t.id] ?? 0) > 0 &&
-                            Object.entries(m.stats.votes).some(
-                              ([id, votes]) => votes > 0 && !mediaFilter.excludeTags.includes(id),
-                            ),
-                        ).length
-                  }
-                  countShow1
-                />
-              </button>
-            )
-          })}
+          {allMedias
+            ? allTags?.map((t) => {
+                const isEnabled = !mediaFilter.excludeTags.includes(t.id)
+                return (
+                  <button
+                    key={t.id}
+                    className="cursor-pointer"
+                    onClick={() =>
+                      setMediaFilter((prev) => ({
+                        ...prev,
+                        excludeTags: isEnabled
+                          ? [...prev.excludeTags, t.id]
+                          : prev.excludeTags.filter((id) => id !== t.id),
+                      }))
+                    }
+                    data-theme={isEnabled ? t.theme : undefined}
+                  >
+                    <MediaTag
+                      key={t.id}
+                      label={t.name}
+                      checked={isEnabled}
+                      primary={isEnabled}
+                      icon={!isEnabled ? <FiX /> : null}
+                      count={tagCounts[t.id]}
+                      countShow1
+                    />
+                  </button>
+                )
+              })
+            : null}
         </div>
         {/* list medias */}
         <div className="flex flex-col px-3 gap-2">
