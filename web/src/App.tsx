@@ -1,35 +1,10 @@
-import {
-  keepPreviousData,
-  QueryClient,
-  QueryClientProvider,
-  useMutation,
-  useQuery,
-} from "@tanstack/react-query"
+import { keepPreviousData, QueryClient, QueryClientProvider, useMutation, useQuery } from "@tanstack/react-query"
 import "./App.css"
-import {
-  useCallback,
-  useEffect,
-  useMemo,
-  useRef,
-  useState,
-  type ReactNode,
-} from "react"
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react"
 import { createPortal } from "react-dom"
 import { cx } from "./classnameswrap"
-import {
-  createBrowserRouter,
-  Link,
-  RouterProvider,
-  useSearchParams,
-} from "react-router"
-import {
-  FiAlertCircle,
-  FiCheck,
-  FiLoader,
-  FiMenu,
-  FiMinus,
-  FiX,
-} from "react-icons/fi"
+import { createBrowserRouter, Link, RouterProvider, useSearchParams } from "react-router"
+import { FiAlertCircle, FiCheck, FiLoader, FiMenu, FiMinus, FiX } from "react-icons/fi"
 import { useForm } from "react-hook-form"
 import { useDebounceValue, useLocalStorage } from "usehooks-ts"
 import { api } from "./api"
@@ -140,10 +115,7 @@ const SEARCH_PLACEHOLDERS = [
 const App = () => {
   const appRef = useRef<HTMLDivElement>(null)
   const searchPlaceholder = useState(
-    () =>
-      SEARCH_PLACEHOLDERS[
-        Math.floor(Math.random() * SEARCH_PLACEHOLDERS.length)
-      ],
+    () => SEARCH_PLACEHOLDERS[Math.floor(Math.random() * SEARCH_PLACEHOLDERS.length)],
   )[0]
   const { data: allTags } = useAllTags()
   const { data: allMedias } = useQuery({
@@ -177,17 +149,13 @@ const App = () => {
   // search results
   const { data: searchResults, isFetching: isSearchFetching } = useQuery({
     queryKey: ["media_search", { query: queryDebounced }],
-    queryFn: () =>
-      api.post({ query: queryDebounced }, "/media/search").json<Media[]>(),
+    queryFn: () => api.post({ query: queryDebounced }, "/media/search").json<Media[]>(),
     enabled: !!queryDebounced.length,
     placeholderData: keepPreviousData,
     networkMode: "offlineFirst",
   })
   const [selectedMediaId, setSelectedMediaId] = useState<string>()
-  const isSearching = useMemo(
-    () => !!query.length && isSearchFetching,
-    [query, isSearchFetching],
-  )
+  const isSearching = useMemo(() => !!query.length && isSearchFetching, [query, isSearchFetching])
   const listMedias = useMemo(() => {
     let medias: Media[] = []
     if (!!query.length) {
@@ -195,18 +163,16 @@ const App = () => {
     } else if (allMedias) {
       medias = allMedias.sort((a, b) => (b.rank ?? 0) - (a.rank ?? 0))
     }
-    return medias.filter(
-      (m) =>
-        // does not have excluded tag
-        !Object.keys(m.stats.votes).filter(
-          (id) => mediaFilter.excludeTags.includes(id) && !!m.stats.votes[id],
-        ).length,
-    )
+    return medias.filter((m) => {
+      // has at least one tag that is not excluded
+      if (!mediaFilter.excludeTags.length || !mediaFilter.excludeTags.filter((id) => !!m.stats.votes[id]).length) {
+        return true
+      }
+      return false
+    })
   }, [searchResults, allMedias, query, mediaFilter])
   const selectedMedia = useMemo(
-    () =>
-      listMedias.find((m) => m.id === selectedMediaId) ??
-      searchResults?.find((m) => m.id === selectedMediaId),
+    () => listMedias.find((m) => m.id === selectedMediaId) ?? searchResults?.find((m) => m.id === selectedMediaId),
     [selectedMediaId, listMedias, searchResults],
   )
   useEffect(() => {
@@ -265,19 +231,12 @@ const App = () => {
   }, [mediaFilter, allTags])
 
   return (
-    <div
-      id="app"
-      ref={appRef}
-      className="overflow-y-auto overflow-x-hidden absolute inset-0"
-    >
+    <div id="app" ref={appRef} className="overflow-y-auto overflow-x-hidden absolute inset-0">
       <div className="mx-auto md:max-w-3xl w-full absolute inset-0 flex flex-col gap-3">
         <div className="navbar gap-2 pb-0">
           <div className="navbar-start flex-0">
             <button
-              className={cx(
-                "btn btn-ghost text-lg uppercase w-38",
-                isSearching && "text-primary animate-pulse",
-              )}
+              className={cx("btn btn-ghost text-lg uppercase w-38", isSearching && "text-primary animate-pulse")}
               onClick={() => setQuery("")}
             >
               {isSearching ? `coolmovies420` : `coolmovies4u`}
@@ -295,11 +254,7 @@ const App = () => {
             {/* menu */}
             <button
               className="btn btn-square"
-              onClick={() =>
-                (
-                  document.getElementById("menu") as HTMLDialogElement
-                ).showModal()
-              }
+              onClick={() => (document.getElementById("menu") as HTMLDialogElement).showModal()}
             >
               <FiMenu />
             </button>
@@ -324,11 +279,7 @@ const App = () => {
               className="opacity-50"
               checked={enabledFiltersStatus === "all"}
               icon={
-                enabledFiltersStatus === "some" ? (
-                  <FiMinus />
-                ) : enabledFiltersStatus === "none" ? (
-                  <FiX />
-                ) : undefined
+                enabledFiltersStatus === "some" ? <FiMinus /> : enabledFiltersStatus === "none" ? <FiX /> : undefined
               }
               count={listMedias.length}
             />
@@ -342,9 +293,7 @@ const App = () => {
                 onClick={() =>
                   setMediaFilter((prev) => ({
                     ...prev,
-                    excludeTags: isEnabled
-                      ? [...prev.excludeTags, t.id]
-                      : prev.excludeTags.filter((id) => id !== t.id),
+                    excludeTags: isEnabled ? [...prev.excludeTags, t.id] : prev.excludeTags.filter((id) => id !== t.id),
                   }))
                 }
                 data-theme={isEnabled ? t.theme : undefined}
@@ -356,8 +305,15 @@ const App = () => {
                   primary={isEnabled}
                   icon={!isEnabled ? <FiX /> : null}
                   count={
-                    listMedias.filter((m) => (m.stats.votes[t.id] ?? 0) > 0)
-                      .length
+                    isEnabled
+                      ? listMedias.filter((m) => (m.stats.votes[t.id] ?? 0) > 0).length
+                      : (query.length ? searchResults ?? [] : allMedias ?? []).filter(
+                          (m) =>
+                            (m.stats.votes[t.id] ?? 0) > 0 &&
+                            Object.entries(m.stats.votes).some(
+                              ([id, votes]) => votes > 0 && !mediaFilter.excludeTags.includes(id),
+                            ),
+                        ).length
                   }
                   countShow1
                 />
@@ -375,19 +331,12 @@ const App = () => {
               .at(0)
             return (
               // media card
-              <div
-                key={r.id}
-                className="p-3 bg-base-300 content-auto"
-                data-theme={topTag?.theme}
-              >
+              <div key={r.id} className="p-3 bg-base-300 content-auto" data-theme={topTag?.theme}>
                 <div className="bg-base-300 relative roundnd flex flex-col min-h-38 w-full">
                   {/* img */}
                   {r.img ? (
                     <div className="absolute inset-0 w-1/3">
-                      <img
-                        src={r.img}
-                        className="w-full h-full object-cover object-[50%_33%] brightness-130 rounded"
-                      />
+                      <img src={r.img} className="w-full h-full object-cover object-[50%_33%] brightness-130 rounded" />
                     </div>
                   ) : null}
                   {/* info */}
@@ -399,15 +348,10 @@ const App = () => {
                           {/* title */}
                           <button
                             onClick={() => setSelectedMediaId(r.id)}
-                            className={cx(
-                              "text-left",
-                              !notReleased && "cursor-pointer",
-                            )}
+                            className={cx("text-left", !notReleased && "cursor-pointer")}
                             disabled={notReleased}
                           >
-                            <span className="text-2xl leading-tight text-left">
-                              {r.title}
-                            </span>
+                            <span className="text-2xl leading-tight text-left">{r.title}</span>
                             {/* year */}
                             <MediaTag
                               className="text-neutral-600! mx-1"
@@ -424,24 +368,14 @@ const App = () => {
                             </Link>
                           ) : null}
                           {/* not released */}
-                          {notReleased ? (
-                            <MediaTag
-                              label="Coming Soon"
-                              small
-                              icon={<FiAlertCircle />}
-                            />
-                          ) : null}
+                          {notReleased ? <MediaTag label="Coming Soon" small icon={<FiAlertCircle />} /> : null}
                         </div>
                       </div>
                       {/* tags */}
                       <div className="w-full inline-flex gap-0.5 flex-wrap">
                         {allTags
                           ?.filter((t) => !!r.stats.votes[t.id])
-                          .sort(
-                            (a, b) =>
-                              (r.stats.votes[b.id] ?? 0) -
-                              (r.stats.votes[a.id] ?? 0),
-                          )
+                          .sort((a, b) => (r.stats.votes[b.id] ?? 0) - (r.stats.votes[a.id] ?? 0))
                           .map((t, idx) => {
                             return (
                               <MediaTag
@@ -449,12 +383,7 @@ const App = () => {
                                 label={t.name}
                                 count={r.stats.votes[t.id]}
                                 barCount={Math.floor(
-                                  (1 -
-                                    wilson_score_lower(
-                                      r.stats.votes[t.id] ?? 0,
-                                      userCount ?? 0,
-                                    )) *
-                                    3,
+                                  (1 - wilson_score_lower(r.stats.votes[t.id] ?? 0, userCount ?? 0)) * 3,
                                 )}
                                 primary={idx === 0}
                               />
@@ -470,10 +399,7 @@ const App = () => {
         </div>
         {selectedMedia
           ? createPortal(
-              <MediaDialog
-                media={selectedMedia}
-                onClose={() => setSelectedMediaId(undefined)}
-              />,
+              <MediaDialog media={selectedMedia} onClose={() => setSelectedMediaId(undefined)} />,
               document.body,
             )
           : null}
@@ -491,8 +417,7 @@ const MenuDialog = () => {
   })
   // api: add tag
   const { mutateAsync: addTag, isPending } = useMutation({
-    mutationFn: (body: AddTagBody) =>
-      api.url(`/tag/add/${body.tagName}`).post().res(),
+    mutationFn: (body: AddTagBody) => api.url(`/tag/add/${body.tagName}`).post().res(),
     onSuccess: () => queryClient.invalidateQueries(),
   })
   const { register, handleSubmit } = useForm<AddTagBody>({
@@ -508,8 +433,7 @@ const MenuDialog = () => {
     defaultValues: {},
   })
   const { mutateAsync: saveTag } = useMutation({
-    mutationFn: (body: EditTagBody) =>
-      api.post(body, `/tag/${selectedTagId}`).res(),
+    mutationFn: (body: EditTagBody) => api.post(body, `/tag/${selectedTagId}`).res(),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["tag"] })
       setSelectedTagId(undefined)
@@ -517,10 +441,7 @@ const MenuDialog = () => {
     },
   })
   const selectedTag = useMemo(
-    () =>
-      selectedTagId && tags
-        ? tags.find((t) => t.id === selectedTagId)
-        : undefined,
+    () => (selectedTagId && tags ? tags.find((t) => t.id === selectedTagId) : undefined),
     [selectedTagId, tags],
   )
 
@@ -528,84 +449,69 @@ const MenuDialog = () => {
     <dialog id="menu" className="modal">
       <div className="modal-box">
         <h3 className="text-lg font-bold">About</h3>
-        <p className="text-4xl">
-          {
-            "Search for movies, shows, and anime using vibes. Games to be added soon."
-          }
-        </p>
+        <p className="text-4xl">{"Search for movies, shows, and anime using vibes. Games to be added soon."}</p>
         <p>xhh © 2026</p>
-        <div className="divider" />
-        {/* tag editor */}
-        <div className="text-lg font-bold">Tags</div>
-        <div className="inline-flex gap-1 flex-wrap">
-          {tags?.map((t) => {
-            const isSelected = selectedTagId === t.id
-            return (
-              <button
-                key={t.id}
-                className="cursor-pointer"
-                onClick={() => {
-                  if (!formState.isDirty || confirm("Discard changes?")) {
-                    setSelectedTagId((prev) =>
-                      prev === t.id ? undefined : t.id,
-                    )
-                    reset(t)
-                  }
-                }}
-                data-theme={isSelected ? watch("theme", t.theme) : undefined}
-              >
-                <MediaTag
-                  label={t.name}
-                  primary={isSelected}
-                  icon={selectedTagId === t.id ? <FiX /> : undefined}
-                />
-              </button>
-            )
-          })}
-        </div>
-        {selectedTag ? (
-          <form
-            className="w-full flex flex-col gap-1"
-            onSubmit={handleEditTagSubmit((v) => saveTag(v))}
-          >
-            <label className="input w-full">
-              <span className="label">Name</span>
-              <input {...registerEditTag("name")} type="text" />
-            </label>
-            <label className="input w-full">
-              <span className="label">Description</span>
-              <input {...registerEditTag("description")} type="text" />
-            </label>
-            <label className="select w-full">
-              <span className="label">Theme</span>
-              <select {...registerEditTag("theme")}>
-                {THEMES.sort().map((theme) => (
-                  <option key={theme}>{theme}</option>
-                ))}
-              </select>
-            </label>
-            <button className="btn">Save</button>
-          </form>
-        ) : /* add tag form */
-        userRoles?.includes("admin") ? (
-          <form
-            className="flex flex-col gap-2 w-full"
-            onSubmit={handleSubmit((d) => addTag(d))}
-          >
-            {/* add tag input */}
-            <label className="input w-full">
-              <span className="label">Add tag</span>
-              <input
-                {...register("tagName", { required: true })}
-                type="text"
-                placeholder="Name"
-              />
-            </label>
-            {/* add tag submit */}
-            <button className="btn" disabled={isPending}>
-              Add
-            </button>
-          </form>
+        {/* admin stuff */}
+        {userRoles?.includes("admin") ? (
+          <>
+            <div className="divider" />
+            {/* tag editor */}
+            <div className="text-lg font-bold">Tags</div>
+            <div className="inline-flex gap-1 flex-wrap">
+              {tags?.map((t) => {
+                const isSelected = selectedTagId === t.id
+                return (
+                  <button
+                    key={t.id}
+                    className="cursor-pointer"
+                    onClick={() => {
+                      if (!formState.isDirty || confirm("Discard changes?")) {
+                        setSelectedTagId((prev) => (prev === t.id ? undefined : t.id))
+                        reset(t)
+                      }
+                    }}
+                    data-theme={isSelected ? watch("theme", t.theme) : undefined}
+                  >
+                    <MediaTag label={t.name} primary={isSelected} icon={selectedTagId === t.id ? <FiX /> : undefined} />
+                  </button>
+                )
+              })}
+            </div>
+            {selectedTag ? (
+              <form className="w-full flex flex-col gap-1" onSubmit={handleEditTagSubmit((v) => saveTag(v))}>
+                <label className="input w-full">
+                  <span className="label">Name</span>
+                  <input {...registerEditTag("name")} type="text" />
+                </label>
+                <label className="input w-full">
+                  <span className="label">Description</span>
+                  <input {...registerEditTag("description")} type="text" />
+                </label>
+                <label className="select w-full">
+                  <span className="label">Theme</span>
+                  <select {...registerEditTag("theme")}>
+                    {THEMES.sort().map((theme) => (
+                      <option key={theme}>{theme}</option>
+                    ))}
+                  </select>
+                </label>
+                <button className="btn">Save</button>
+              </form>
+            ) : (
+              /* add tag form */
+              <form className="flex flex-col gap-2 w-full" onSubmit={handleSubmit((d) => addTag(d))}>
+                {/* add tag input */}
+                <label className="input w-full">
+                  <span className="label">Add tag</span>
+                  <input {...register("tagName", { required: true })} type="text" placeholder="Name" />
+                </label>
+                {/* add tag submit */}
+                <button className="btn" disabled={isPending}>
+                  Add
+                </button>
+              </form>
+            )}
+          </>
         ) : null}
       </div>
       <form method="dialog" className="modal-backdrop">
@@ -672,20 +578,11 @@ const MediaTag = ({
           <span className="capitalize">{label}</span>
           {count && (count > 1 || countShow1) ? <span>{count}</span> : null}
         </div>
-        {!!description?.length ? (
-          <span className="text-sm leading-none">{description}</span>
-        ) : null}
+        {!!description?.length ? <span className="text-sm leading-none">{description}</span> : null}
       </div>
     </div>
     {new Array(barCount).fill(0).map((_, i) => (
-      <div
-        key={i}
-        className={cx(
-          "w-2 h-full transition-all",
-          primary ? "bg-primary" : "bg-neutral",
-          labelClassName,
-        )}
-      />
+      <div key={i} className={cx("w-2 h-full transition-all", primary ? "bg-primary" : "bg-neutral", labelClassName)} />
     ))}
   </div>
 )
@@ -712,15 +609,11 @@ const MediaDialog = ({ media, onClose }: MediaDialogProps) => {
     <dialog ref={ref} id="media-dialog" className="modal" onClose={onClose}>
       <div className="modal-box flex flex-col gap-2">
         <h3 className="text-3xl">{media.title}</h3>
-        <h4 className="text-sm italic">
-          Click any tags you think match the vibe
-        </h4>
+        <h4 className="text-sm italic">Click any tags you think match the vibe</h4>
         <div className="grid grid-cols-2 gap-2">
           {/* vote on tags */}
           {allTags?.map((t) => {
-            const hasVoted = tagVotes?.some(
-              (v) => t.id === v.tag && media.id === v.media,
-            )
+            const hasVoted = tagVotes?.some((v) => t.id === v.tag && media.id === v.media)
             return (
               <MediaTagVoteButton
                 key={t.id}
@@ -754,33 +647,24 @@ type MediaTagVoteButtonProps = {
   hasVoted?: boolean
 }
 
-const MediaTagVoteButton = ({
-  media,
-  tag,
-  mediaTagProps,
-  hasVoted,
-}: MediaTagVoteButtonProps) => {
+const MediaTagVoteButton = ({ media, tag, mediaTagProps, hasVoted }: MediaTagVoteButtonProps) => {
   // api: add/remove tag from media
-  const { mutateAsync: addMediaTag, isPending: isAddMediaTagPending } =
-    useMutation({
-      mutationFn: (body: AddMediaTagBody) =>
-        api.url(`/media/${body.mediaId}/addtag/${body.tagId}`).put().res(),
-      onSettled: () => {
-        queryClient.invalidateQueries({ queryKey: ["tagvote", media.id] })
-        queryClient.invalidateQueries({ queryKey: ["media"] })
-        queryClient.invalidateQueries({ queryKey: ["media_search"] })
-      },
-    })
-  const { mutateAsync: removeMediaTag, isPending: isRemoveMediaTagPending } =
-    useMutation({
-      mutationFn: (body: AddMediaTagBody) =>
-        api.url(`/media/${body.mediaId}/removetag/${body.tagId}`).put().res(),
-      onSettled: () => {
-        queryClient.invalidateQueries({ queryKey: ["tagvote", media.id] })
-        queryClient.invalidateQueries({ queryKey: ["media"] })
-        queryClient.invalidateQueries({ queryKey: ["media_search"] })
-      },
-    })
+  const { mutateAsync: addMediaTag, isPending: isAddMediaTagPending } = useMutation({
+    mutationFn: (body: AddMediaTagBody) => api.url(`/media/${body.mediaId}/addtag/${body.tagId}`).put().res(),
+    onSettled: () => {
+      queryClient.invalidateQueries({ queryKey: ["tagvote", media.id] })
+      queryClient.invalidateQueries({ queryKey: ["media"] })
+      queryClient.invalidateQueries({ queryKey: ["media_search"] })
+    },
+  })
+  const { mutateAsync: removeMediaTag, isPending: isRemoveMediaTagPending } = useMutation({
+    mutationFn: (body: AddMediaTagBody) => api.url(`/media/${body.mediaId}/removetag/${body.tagId}`).put().res(),
+    onSettled: () => {
+      queryClient.invalidateQueries({ queryKey: ["tagvote", media.id] })
+      queryClient.invalidateQueries({ queryKey: ["media"] })
+      queryClient.invalidateQueries({ queryKey: ["media_search"] })
+    },
+  })
   const isPending = isAddMediaTagPending || isRemoveMediaTagPending
 
   return (
@@ -794,12 +678,7 @@ const MediaTagVoteButton = ({
       disabled={isPending}
       data-theme={!!media.stats.votes[tag.id] ? tag.theme : undefined}
     >
-      <MediaTag
-        {...mediaTagProps}
-        label={tag.name}
-        isLoading={isPending}
-        count={media.stats.votes[tag.id] ?? 0}
-      />
+      <MediaTag {...mediaTagProps} label={tag.name} isLoading={isPending} count={media.stats.votes[tag.id] ?? 0} />
     </button>
   )
 }
