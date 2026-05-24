@@ -36,6 +36,44 @@ import { api } from "./api"
 import { wilson_score_lower } from "./math2"
 import type { VantaEffect } from "vanta"
 
+const THEMES = [
+  "light",
+  "dark",
+  "cupcake",
+  "bumblebee",
+  "emerald",
+  "corporate",
+  "synthwave",
+  "retro",
+  "cyberpunk",
+  "valentine",
+  "halloween",
+  "garden",
+  "forest",
+  "aqua",
+  "lofi",
+  "pastel",
+  "fantasy",
+  "wireframe",
+  "black",
+  "luxury",
+  "dracula",
+  "cmyk",
+  "autumn",
+  "business",
+  "acid",
+  "lemonade",
+  "night",
+  "coffee",
+  "winter",
+  "dim",
+  "nord",
+  "sunset",
+  "caramellatte",
+  "abyss",
+  "silk",
+]
+
 type Media = {
   id: string
   title: string
@@ -52,7 +90,11 @@ type Media = {
 type Tag = {
   id: string
   name: string
+  description: string
+  theme?: string
 }
+
+type EditTagBody = Omit<Tag, "id">
 
 type TagVote = {
   media: string
@@ -70,27 +112,6 @@ type AddTagBody = {
 }
 
 type UserRole = "admin"
-
-const tagNameToTheme: Record<string, string> = {
-  scary: "abyss",
-  trippy: "synthwave",
-  confusing: "sunset",
-  wild: "cyberpunk",
-  relaxing: "coffee",
-  funny: "night",
-}
-const tagDescription: Record<string, string> = {
-  relaxing: "You may become cozy or fall asleep",
-  gross: "Made you queasy",
-  wild: "You may suddenly explode",
-  funny: "Silly or made you pee your pants",
-  scary: "Not for the faint of heart",
-  confusing: "Where am I?",
-  trippy: "My brain hurts",
-}
-
-const getTheme = (tag?: Tag) =>
-  tag && tagNameToTheme[tag.name] ? tagNameToTheme[tag.name] : undefined
 
 const useMediaFilter = () =>
   useLocalStorage("media-fiter", {
@@ -124,10 +145,6 @@ const App = () => {
         Math.floor(Math.random() * SEARCH_PLACEHOLDERS.length)
       ],
   )[0]
-  const { data: userRoles } = useQuery({
-    queryKey: ["user_role"],
-    queryFn: () => api.get("/user/roles").json<UserRole[]>(),
-  })
   const { data: allTags } = useAllTags()
   const { data: allMedias } = useQuery({
     queryKey: ["media"],
@@ -195,15 +212,6 @@ const App = () => {
   useEffect(() => {
     if (selectedMediaId && !selectedMedia) setSelectedMediaId(undefined)
   }, [selectedMedia, selectedMediaId])
-  // api: add tag
-  const { mutateAsync: addTag } = useMutation({
-    mutationFn: (body: AddTagBody) =>
-      api.url(`/tag/add/${body.tagName}`).post().res(),
-    onSuccess: () => queryClient.invalidateQueries(),
-  })
-  const { register, handleSubmit } = useForm<AddTagBody>({
-    values: { tagName: "" },
-  })
   useEffect(() => {
     // add bg fog effect
     // https://www.vantajs.com/?effect=fog#(backgroundAlpha:1,baseColor:657930,blurFactor:0.18,gyroControls:!f,highlightColor:4604996,lowlightColor:2763306,midtoneColor:3947580,minHeight:200,minWidth:200,mouseControls:!t,scale:2,scaleMobile:4,speed:1,touchControls:!t,zoom:1)
@@ -295,39 +303,7 @@ const App = () => {
             >
               <FiMenu />
             </button>
-            <dialog id="menu" className="modal">
-              <div className="modal-box">
-                <h3 className="text-lg font-bold">About</h3>
-                <p className="text-4xl">
-                  {
-                    "Search for movies, shows, and anime using vibes. Games to be added soon."
-                  }
-                </p>
-                <p>xhh © 2026</p>
-                {/* add tag form */}
-                {userRoles?.includes("admin") ? (
-                  <form
-                    className="flex flex-col gap-2 w-full"
-                    onSubmit={handleSubmit((d) => addTag(d))}
-                  >
-                    {/* add tag input */}
-                    <label className="input w-full">
-                      <span className="label">Add tag</span>
-                      <input
-                        {...register("tagName", { required: true })}
-                        type="text"
-                        placeholder="Name"
-                      />
-                    </label>
-                    {/* add tag submit */}
-                    <button className="btn">Add</button>
-                  </form>
-                ) : null}
-              </div>
-              <form method="dialog" className="modal-backdrop">
-                <button>Close</button>
-              </form>
-            </dialog>
+            <MenuDialog />
           </div>
         </div>
         {/* filters */}
@@ -354,9 +330,9 @@ const App = () => {
                   <FiX />
                 ) : undefined
               }
+              count={listMedias.length}
             />
           </button>
-
           {allTags?.map((t) => {
             const isEnabled = !mediaFilter.excludeTags.includes(t.id)
             return (
@@ -371,7 +347,7 @@ const App = () => {
                       : prev.excludeTags.filter((id) => id !== t.id),
                   }))
                 }
-                data-theme={isEnabled ? getTheme(t) : undefined}
+                data-theme={isEnabled ? t.theme : undefined}
               >
                 <MediaTag
                   key={t.id}
@@ -379,6 +355,11 @@ const App = () => {
                   checked={isEnabled}
                   primary={isEnabled}
                   icon={!isEnabled ? <FiX /> : null}
+                  count={
+                    listMedias.filter((m) => (m.stats.votes[t.id] ?? 0) > 0)
+                      .length
+                  }
+                  countShow1
                 />
               </button>
             )
@@ -397,7 +378,7 @@ const App = () => {
               <div
                 key={r.id}
                 className="p-3 bg-base-300 content-auto"
-                data-theme={getTheme(topTag)}
+                data-theme={topTag?.theme}
               >
                 <div className="bg-base-300 relative roundnd flex flex-col min-h-38 w-full">
                   {/* img */}
@@ -466,7 +447,7 @@ const App = () => {
                               <MediaTag
                                 key={t.id}
                                 label={t.name}
-                                voteCount={r.stats.votes[t.id]}
+                                count={r.stats.votes[t.id]}
                                 barCount={Math.floor(
                                   (1 -
                                     wilson_score_lower(
@@ -501,13 +482,147 @@ const App = () => {
   )
 }
 
+const MenuDialog = () => {
+  const [selectedTagId, setSelectedTagId] = useState<string>()
+  const { data: tags } = useAllTags()
+  const { data: userRoles } = useQuery({
+    queryKey: ["user_role"],
+    queryFn: () => api.get("/user/roles").json<UserRole[]>(),
+  })
+  // api: add tag
+  const { mutateAsync: addTag, isPending } = useMutation({
+    mutationFn: (body: AddTagBody) =>
+      api.url(`/tag/add/${body.tagName}`).post().res(),
+    onSuccess: () => queryClient.invalidateQueries(),
+  })
+  const { register, handleSubmit } = useForm<AddTagBody>({
+    values: { tagName: "" },
+  })
+  const {
+    register: registerEditTag,
+    handleSubmit: handleEditTagSubmit,
+    formState,
+    reset,
+    watch,
+  } = useForm<Tag>({
+    defaultValues: {},
+  })
+  const { mutateAsync: saveTag } = useMutation({
+    mutationFn: (body: EditTagBody) =>
+      api.post(body, `/tag/${selectedTagId}`).res(),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["tag"] })
+      setSelectedTagId(undefined)
+      reset()
+    },
+  })
+  const selectedTag = useMemo(
+    () =>
+      selectedTagId && tags
+        ? tags.find((t) => t.id === selectedTagId)
+        : undefined,
+    [selectedTagId, tags],
+  )
+
+  return (
+    <dialog id="menu" className="modal">
+      <div className="modal-box">
+        <h3 className="text-lg font-bold">About</h3>
+        <p className="text-4xl">
+          {
+            "Search for movies, shows, and anime using vibes. Games to be added soon."
+          }
+        </p>
+        <p>xhh © 2026</p>
+        <div className="divider" />
+        {/* tag editor */}
+        <div className="text-lg font-bold">Tags</div>
+        <div className="inline-flex gap-1 flex-wrap">
+          {tags?.map((t) => {
+            const isSelected = selectedTagId === t.id
+            return (
+              <button
+                key={t.id}
+                className="cursor-pointer"
+                onClick={() => {
+                  if (!formState.isDirty || confirm("Discard changes?")) {
+                    setSelectedTagId((prev) =>
+                      prev === t.id ? undefined : t.id,
+                    )
+                    reset(t)
+                  }
+                }}
+                data-theme={isSelected ? watch("theme", t.theme) : undefined}
+              >
+                <MediaTag
+                  label={t.name}
+                  primary={isSelected}
+                  icon={selectedTagId === t.id ? <FiX /> : undefined}
+                />
+              </button>
+            )
+          })}
+        </div>
+        {selectedTag ? (
+          <form
+            className="w-full flex flex-col gap-1"
+            onSubmit={handleEditTagSubmit((v) => saveTag(v))}
+          >
+            <label className="input w-full">
+              <span className="label">Name</span>
+              <input {...registerEditTag("name")} type="text" />
+            </label>
+            <label className="input w-full">
+              <span className="label">Description</span>
+              <input {...registerEditTag("description")} type="text" />
+            </label>
+            <label className="select w-full">
+              <span className="label">Theme</span>
+              <select {...registerEditTag("theme")}>
+                {THEMES.map((theme) => (
+                  <option key={theme}>{theme}</option>
+                ))}
+              </select>
+            </label>
+            <button className="btn">Save</button>
+          </form>
+        ) : /* add tag form */
+        userRoles?.includes("admin") ? (
+          <form
+            className="flex flex-col gap-2 w-full"
+            onSubmit={handleSubmit((d) => addTag(d))}
+          >
+            {/* add tag input */}
+            <label className="input w-full">
+              <span className="label">Add tag</span>
+              <input
+                {...register("tagName", { required: true })}
+                type="text"
+                placeholder="Name"
+              />
+            </label>
+            {/* add tag submit */}
+            <button className="btn" disabled={isPending}>
+              Add
+            </button>
+          </form>
+        ) : null}
+      </div>
+      <form method="dialog" className="modal-backdrop">
+        <button>Close</button>
+      </form>
+    </dialog>
+  )
+}
+
 type MediaTagProps = {
   label: ReactNode
   description?: string
   labelClassName?: string
   barCount?: number
   className?: string
-  voteCount?: number
+  count?: number
+  countShow1?: boolean
   small?: boolean
   checked?: boolean
   primary?: boolean
@@ -521,7 +636,8 @@ const MediaTag = ({
   labelClassName,
   barCount = 0,
   className,
-  voteCount = 0,
+  count = 0,
+  countShow1,
   small,
   checked,
   primary,
@@ -554,12 +670,12 @@ const MediaTag = ({
             icon
           )}
           <span className="capitalize">{label}</span>
+          {count && (count > 1 || countShow1) ? <span>{count}</span> : null}
         </div>
         {!!description?.length ? (
           <span className="text-sm leading-none">{description}</span>
         ) : null}
       </div>
-      {voteCount && voteCount > 1 ? <span>{voteCount}</span> : null}
     </div>
     {new Array(barCount).fill(0).map((_, i) => (
       <div
@@ -596,7 +712,9 @@ const MediaDialog = ({ media, onClose }: MediaDialogProps) => {
     <dialog ref={ref} id="media-dialog" className="modal" onClose={onClose}>
       <div className="modal-box flex flex-col gap-2">
         <h3 className="text-3xl">{media.title}</h3>
-        <h4 className="text-sm italic">Select tags to add</h4>
+        <h4 className="text-sm italic">
+          Click any tags you think match the vibe
+        </h4>
         <div className="grid grid-cols-2 gap-2">
           {/* vote on tags */}
           {allTags?.map((t) => {
@@ -612,7 +730,7 @@ const MediaDialog = ({ media, onClose }: MediaDialogProps) => {
                   className: "text-4xl w-full h-full items-start",
                   checked: hasVoted,
                   primary: hasVoted,
-                  description: tagDescription[t.name],
+                  description: t.description,
                 }}
                 hasVoted={hasVoted}
               />
@@ -674,13 +792,13 @@ const MediaTagVoteButton = ({
           : addMediaTag({ mediaId: media.id, tagId: tag.id })
       }
       disabled={isPending}
-      data-theme={!!media.stats.votes[tag.id] ? getTheme(tag) : undefined}
+      data-theme={!!media.stats.votes[tag.id] ? tag.theme : undefined}
     >
       <MediaTag
         {...mediaTagProps}
         label={tag.name}
         isLoading={isPending}
-        voteCount={media.stats.votes[tag.id] ?? 0}
+        count={media.stats.votes[tag.id] ?? 0}
       />
     </button>
   )

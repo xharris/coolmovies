@@ -4,7 +4,7 @@ from fastapi.staticfiles import StaticFiles
 from contextlib import asynccontextmanager
 from pkg import client, model, env, auth, math2
 from pymongo import MongoClient
-from typing import List, Dict, Annotated
+from typing import List, Dict, Annotated, Optional
 from pydantic import BaseModel
 from os import environ
 from logging import getLogger, basicConfig, INFO
@@ -166,6 +166,25 @@ def tag_add(name: str, current_user: Annotated[str,DependsCurrentUser]):
         tag_repo.save(tag)
         return str(tag.id)
     return str(tag.id)
+
+class TagEditBody(BaseModel):
+    name: Optional[str] = None
+    description: Optional[str] = None
+    theme: Optional[str] = None
+
+@app.post("/api/tag/{id}")
+def tag_edit(id: str, body: TagEditBody):
+    tag_repo = model.TagRepo(db)
+    tag = tag_repo.find_one_by_id(id)
+    if not tag:
+        raise HTTPException(404, "tag not found")
+    if body.name:
+        tag.name = body.name
+    if body.description:
+        tag.description = body.description
+    tag.theme = body.theme
+    tag_repo.save(tag)
+    
 
 @app.get("/api/media/{media_id}/tagvotes")
 def media_tag_votes(media_id: str, current_user: Annotated[str,DependsCurrentUser]):

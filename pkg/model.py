@@ -58,6 +58,8 @@ class Tag(BaseModel):
     id: PydanticObjectId = None
     name: str
     created_by: PydanticObjectId
+    description: str = ''
+    theme: Optional[str] = None
 
 class TagRepo(AbstractRepository[Tag]):
     class Meta:
