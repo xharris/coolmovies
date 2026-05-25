@@ -4,7 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } fro
 import { createPortal } from "react-dom"
 import { cx } from "./classnameswrap"
 import { createBrowserRouter, Link, RouterProvider, useSearchParams } from "react-router"
-import { FiAlertCircle, FiCheck, FiLoader, FiMenu, FiMinus, FiX } from "react-icons/fi"
+import { FiAlertCircle, FiCheck, FiCircle, FiLoader, FiMenu, FiMinus, FiSquare, FiX } from "react-icons/fi"
 import { useForm } from "react-hook-form"
 import { useDebounceValue, useLocalStorage } from "usehooks-ts"
 import { api } from "./api"
@@ -369,7 +369,7 @@ const App = () => {
                             className={cx("text-left", !notReleased && "cursor-pointer")}
                             disabled={notReleased}
                           >
-                            <span className="text-2xl leading-tight text-left">{r.title}</span>
+                            <span className="text-2xl leading-tight text-left underline">{r.title}</span>
                             {/* year */}
                             <MediaTag
                               className="text-neutral-600! mx-1"
@@ -696,7 +696,13 @@ const MediaTagVoteButton = ({ media, tag, mediaTagProps, hasVoted }: MediaTagVot
       disabled={isPending}
       data-theme={!!media.stats.votes[tag.id] ? tag.theme : undefined}
     >
-      <MediaTag {...mediaTagProps} label={tag.name} isLoading={isPending} count={media.stats.votes[tag.id] ?? 0} />
+      <MediaTag
+        {...mediaTagProps}
+        label={tag.name}
+        isLoading={isPending}
+        count={media.stats.votes[tag.id] ?? 0}
+        icon={hasVoted ? undefined : <FiSquare className="opacity-30" />}
+      />
     </button>
   )
 }
