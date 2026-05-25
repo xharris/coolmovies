@@ -234,14 +234,19 @@ const App = () => {
     if (!allMedias || !allTags) {
       return counts
     }
+    const enabledTags = allTags.map((t) => t.id).filter((id) => !mediaFilter.excludeTags.includes(id))
     for (const tag of allTags) {
       const possibleMedias = allMedias.filter(
         (m) =>
           // has this tag
           !!m.stats.votes[tag.id] &&
           // has at least one tag that isn't excluded
-          Object.keys(m.stats.votes).some((id) => !!m.stats.votes[id] && !mediaFilter.excludeTags.includes(id)),
+          Object.keys(m.stats.votes).some((id) => !!m.stats.votes[id] && enabledTags.includes(id)),
       )
+      // console.log(
+      //   tag.name,
+      //   possibleMedias.map((m) => m.title),
+      // )
       counts[tag.id] = mediaFilter.excludeTags.includes(tag.id)
         ? possibleMedias.length
         : listMedias.filter((m) => !!m.stats.votes[tag.id]).length
