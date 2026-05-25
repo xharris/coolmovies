@@ -4,7 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } fro
 import { createPortal } from "react-dom"
 import { cx } from "./classnameswrap"
 import { createBrowserRouter, Link, RouterProvider, useSearchParams } from "react-router"
-import { FiAlertCircle, FiCheck, FiCircle, FiLoader, FiMenu, FiMinus, FiSquare, FiX } from "react-icons/fi"
+import { FiAlertCircle, FiCheck, FiLoader, FiMenu, FiMinus, FiSquare, FiX } from "react-icons/fi"
 import { useForm } from "react-hook-form"
 import { useDebounceValue, useLocalStorage } from "usehooks-ts"
 import { api } from "./api"
