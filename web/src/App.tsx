@@ -107,8 +107,6 @@ const SEARCH_PLACEHOLDERS = [
   "Find something else...",
   "What are we watching tonight...?",
   "Search for a vibe...",
-  // "Find something to keep you up...",
-  // "Looking for something trippy?",
   // "What are we playing tonight?",
 ]
 
@@ -147,7 +145,11 @@ const App = () => {
   }, [])
   const [queryDebounced] = useDebounceValue(query, 200)
   // search results
-  const { data: searchResults, isFetching: isSearchFetching } = useQuery({
+  const {
+    data: searchResults,
+    isFetching: isSearchFetching,
+    isError: isSearchError,
+  } = useQuery({
     queryKey: ["media_search", { query: queryDebounced }],
     queryFn: () => api.post({ query: queryDebounced }, "/media/search").json<Media[]>(),
     enabled: !!queryDebounced.length,
@@ -341,79 +343,84 @@ const App = () => {
         </div>
         {/* list medias */}
         <div className="flex flex-col px-3 gap-2">
-          {listMedias?.map((r) => {
-            const notReleased = r.year > new Date().getFullYear()
-            const topTag = allTags
-              ?.filter((t) => !!r.stats.votes[t.id])
-              .sort((a, b) => r.stats.votes[b.id] - r.stats.votes[a.id])
-              .at(0)
-            return (
-              // media card
-              <div key={r.id} className="p-3 bg-base-300 content-auto" data-theme={topTag?.theme}>
-                <div className="bg-base-300 relative roundnd flex flex-col min-h-38 w-full">
-                  {/* img */}
-                  {r.img ? (
-                    <div className="absolute inset-0 w-1/3">
-                      <img src={r.img} className="w-full h-full object-cover object-[50%_33%] brightness-130 rounded" />
-                    </div>
-                  ) : null}
-                  {/* info */}
-                  <div className="z-10 leading-snug h-full flex gap-3">
-                    <div className="w-1/3 shrink-0" />
-                    <div className="flex flex-col justify-between w-full gap-1">
-                      <div className="flex flex-col gap-1">
-                        <div className="w-full">
-                          {/* title */}
-                          <button
-                            onClick={() => setSelectedMediaId(r.id)}
-                            className={cx("text-left", !notReleased && "cursor-pointer")}
-                            disabled={notReleased}
-                          >
-                            <span className="text-2xl leading-tight text-left underline">{r.title}</span>
-                            {/* year */}
-                            <MediaTag
-                              className="text-neutral-600! mx-1"
-                              labelClassName="bg-neutral-300"
-                              label={r.year}
-                            />
-                          </button>
+          {isSearchError
+            ? "Sorry, something is broken right now. Try again later. :("
+            : listMedias?.map((r) => {
+                const notReleased = r.year > new Date().getFullYear()
+                const topTag = allTags
+                  ?.filter((t) => !!r.stats.votes[t.id])
+                  .sort((a, b) => r.stats.votes[b.id] - r.stats.votes[a.id])
+                  .at(0)
+                return (
+                  // media card
+                  <div key={r.id} className="p-3 bg-base-300 content-auto" data-theme={topTag?.theme}>
+                    <div className="bg-base-300 relative roundnd flex flex-col min-h-38 w-full">
+                      {/* img */}
+                      {r.img ? (
+                        <div className="absolute inset-0 w-1/3">
+                          <img
+                            src={r.img}
+                            className="w-full h-full object-cover object-[50%_33%] brightness-130 rounded"
+                          />
                         </div>
-                        <div className="inline-flex gap-1">
-                          {/* urls */}
-                          {r.imdb_url ? (
-                            <Link to={r.imdb_url}>
-                              <MediaTag label="IMDB" small />
-                            </Link>
-                          ) : null}
-                          {/* not released */}
-                          {notReleased ? <MediaTag label="Coming Soon" small icon={<FiAlertCircle />} /> : null}
+                      ) : null}
+                      {/* info */}
+                      <div className="z-10 leading-snug h-full flex gap-3">
+                        <div className="w-1/3 shrink-0" />
+                        <div className="flex flex-col justify-between w-full gap-1">
+                          <div className="flex flex-col gap-1">
+                            <div className="w-full">
+                              {/* title */}
+                              <button
+                                onClick={() => setSelectedMediaId(r.id)}
+                                className={cx("text-left", !notReleased && "cursor-pointer")}
+                                disabled={notReleased}
+                              >
+                                <span className="text-2xl leading-tight text-left underline">{r.title}</span>
+                                {/* year */}
+                                <MediaTag
+                                  className="text-neutral-600! mx-1"
+                                  labelClassName="bg-neutral-300"
+                                  label={r.year}
+                                />
+                              </button>
+                            </div>
+                            <div className="inline-flex gap-1">
+                              {/* urls */}
+                              {r.imdb_url ? (
+                                <Link to={r.imdb_url}>
+                                  <MediaTag label="IMDB" small />
+                                </Link>
+                              ) : null}
+                              {/* not released */}
+                              {notReleased ? <MediaTag label="Coming Soon" small icon={<FiAlertCircle />} /> : null}
+                            </div>
+                          </div>
+                          {/* tags */}
+                          <div className="w-full inline-flex gap-0.5 flex-wrap">
+                            {allTags
+                              ?.filter((t) => !!r.stats.votes[t.id])
+                              .sort((a, b) => (r.stats.votes[b.id] ?? 0) - (r.stats.votes[a.id] ?? 0))
+                              .map((t, idx) => {
+                                return (
+                                  <MediaTag
+                                    key={t.id}
+                                    label={t.name}
+                                    count={r.stats.votes[t.id]}
+                                    barCount={Math.floor(
+                                      (1 - wilson_score_lower(r.stats.votes[t.id] ?? 0, userCount ?? 0)) * 3,
+                                    )}
+                                    primary={idx === 0}
+                                  />
+                                )
+                              })}
+                          </div>
                         </div>
-                      </div>
-                      {/* tags */}
-                      <div className="w-full inline-flex gap-0.5 flex-wrap">
-                        {allTags
-                          ?.filter((t) => !!r.stats.votes[t.id])
-                          .sort((a, b) => (r.stats.votes[b.id] ?? 0) - (r.stats.votes[a.id] ?? 0))
-                          .map((t, idx) => {
-                            return (
-                              <MediaTag
-                                key={t.id}
-                                label={t.name}
-                                count={r.stats.votes[t.id]}
-                                barCount={Math.floor(
-                                  (1 - wilson_score_lower(r.stats.votes[t.id] ?? 0, userCount ?? 0)) * 3,
-                                )}
-                                primary={idx === 0}
-                              />
-                            )
-                          })}
                       </div>
                     </div>
                   </div>
-                </div>
-              </div>
-            )
-          })}
+                )
+              })}
         </div>
         {selectedMedia
           ? createPortal(

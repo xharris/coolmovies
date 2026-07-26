@@ -110,6 +110,7 @@ def media_search(body: MediaSearchBody):
         res.raise_for_status()
     except Exception as e:
         log.error("could not search fmdb: %s", e)
+        raise HTTPException(500, "external api broken")
     data = res.json()
     if data["ok"]:
         for item in data["description"]:
