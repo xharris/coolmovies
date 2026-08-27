@@ -12,6 +12,8 @@ from pydantic_mongo import PydanticObjectId
 import os
 from slowapi import Limiter, _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
+from datetime import date
+from deepmerge import always_merger
 
 DEFAULT_TAGS = ['scary', 'relaxing', 'trippy', 'confusing', 'funny']
 
@@ -30,7 +32,17 @@ DependsCurrentUser = auth.make_depends_user(db)
 SYSTEM_USER_ID = PydanticObjectId("000000000000000000000000")
 
 def migrate():
+    today = date.today()
     media_repo = model.MediaRepo(db)
+    # missing imdb_id, unreleased_media
+    delete_query = {
+        "$or": [{"imdb_id": None}, {"year": {"$gt": today.year}}]
+    }
+    medias: List[model.Media] = list(media_repo.find_by(delete_query))
+    for m in medias:
+        media_repo.delete(m)
+    # unreleased media
+
     # missing Media.stats
     medias: List[model.Media] = list(media_repo.find_by({"stats": {"$exists": False}}))
     media_repo.save_many(medias)
@@ -103,28 +115,13 @@ class MediaSearchBody(BaseModel):
 @app.post("/api/media/search")
 def media_search(body: MediaSearchBody):
     new_medias: List[model.Media] = []
-    # search imdb
-    imdb_client = client.FMDB()
-    res = imdb_client.search_imdb(body.query)
+    # search movies
     try:
-        res.raise_for_status()
+        movies = client.Movies(api_token=env.getenv('TMDB_API_TOKEN'))
+        new_medias.extend(movies.search(body.query))
     except Exception as e:
-        log.error("could not search fmdb: %s", e)
-        raise HTTPException(500, "external api broken")
-    data = res.json()
-    if data["ok"]:
-        for item in data["description"]:
-            try:
-                new = model.Media(
-                    title=item.get("#TITLE"),
-                    year=item.get("#YEAR"),
-                    imdb_id=item.get("#IMDB_ID"),
-                    imdb_url=item.get("#IMDB_URL"),
-                    img=item.get("#IMG_POSTER"),
-                )
-                new_medias.append(new)
-            except Exception as e:
-                log.warning("could not parse fmdb item:\nitem=%s\n%s", item, e)
+        log.error("could not search movies: %s", e)
+
     # search thegamesdb
     games_client = client.TheGamesDB()
     res = games_client.games_by_game_name(body.query, ['platform'])
@@ -132,14 +129,18 @@ def media_search(body: MediaSearchBody):
         res.raise_for_status()
     except Exception as e:
         log.error("could not search thegamesdb: %s", e)
+
     # store in db
     repo = model.MediaRepo(db)
     medias: List[model.Media] = []
-    item: Dict
     for new in new_medias:
         if m := repo.find_one_by({"$or": [{"imdb_id": new.imdb_id}]}):
-            log.info("save existing: %s (%d, %s)", m.title, m.year, m.imdb_id)
-            medias.append(m)
+            log.info("save existing: %s (%d, %s, pop=%d)", m.title, m.year, m.imdb_id, m.popularity)
+            dict_merged = always_merger.merge(m.model_dump(exclude_unset=True), new.model_dump(exclude_unset=True))
+            merged = model.Media(**dict_merged)
+            merged.id = m.id
+            repo.save(merged)
+            medias.append(merged)
         else:
             log.info("add media: %s (%d, %s)", new.title, new.year, new.imdb_id)
             repo.save(new)

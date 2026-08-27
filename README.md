@@ -13,3 +13,9 @@
 - Vite TypeScript + React UI
 - MongoDB
 - Hosted on fly.io
+
+## Notes
+
+### Backup
+
+`mongodump --uri="<connection-string>" --db=<db-name> --gzip --archive="backup-$(date +%F).gz"`

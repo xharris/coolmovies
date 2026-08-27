@@ -10,6 +10,7 @@ import { useDebounceValue, useLocalStorage } from "usehooks-ts"
 import { api } from "./api"
 import { wilson_score_lower } from "./math2"
 import type { VantaEffect } from "vanta"
+import { ReactQueryDevtools } from "@tanstack/react-query-devtools"
 
 const THEMES = [
   "light",
@@ -60,6 +61,7 @@ type Media = {
     votes: Record<string, number>
   }
   rank?: number
+  popularity: number
 }
 
 type Tag = {
@@ -155,6 +157,8 @@ const App = () => {
     enabled: !!queryDebounced.length,
     placeholderData: keepPreviousData,
     networkMode: "offlineFirst",
+    staleTime: 0,
+    gcTime: 0,
   })
   const [selectedMediaId, setSelectedMediaId] = useState<string>()
   const isSearching = useMemo(() => !!query.length && isSearchFetching, [query, isSearchFetching])
@@ -163,15 +167,23 @@ const App = () => {
     if (!!query.length) {
       medias = searchResults ?? []
     } else if (allMedias) {
-      medias = allMedias.sort((a, b) => (b.rank ?? 0) - (a.rank ?? 0))
+      medias = allMedias.sort(
+        (a, b) =>
+          // a.rank && b.rank ? b.rank - a.rank :
+          b.popularity - a.popularity,
+      )
     }
-    return medias.filter((m) => {
-      // has at least one tag that is not excluded
-      if (!mediaFilter.excludeTags.length || !mediaFilter.excludeTags.filter((id) => !!m.stats.votes[id]).length) {
-        return true
-      }
-      return false
-    })
+    return medias
+      .reduce(
+        (prev, curr) =>
+          // has at least one tag that is not excluded
+          (!mediaFilter.excludeTags.length || !mediaFilter.excludeTags.filter((id) => !!curr.stats.votes[id]).length) &&
+          !prev.some((p) => p.id === curr.id)
+            ? [...prev, curr]
+            : prev,
+        [] as Media[],
+      )
+      .sort((a, b) => b.popularity - a.popularity)
   }, [searchResults, allMedias, query, mediaFilter])
   const selectedMedia = useMemo(
     () => listMedias.find((m) => m.id === selectedMediaId) ?? searchResults?.find((m) => m.id === selectedMediaId),
@@ -353,7 +365,13 @@ const App = () => {
                   .at(0)
                 return (
                   // media card
-                  <div key={r.id} className="p-3 bg-base-300 content-auto" data-theme={topTag?.theme}>
+                  <div
+                    key={r.id}
+                    data-id={r.id}
+                    data-pop={r.popularity}
+                    className="p-3 bg-base-300 content-auto"
+                    data-theme={topTag?.theme}
+                  >
                     <div className="bg-base-300 relative roundnd flex flex-col min-h-38 w-full">
                       {/* img */}
                       {r.img ? (
@@ -475,7 +493,15 @@ const MenuDialog = () => {
       <div className="modal-box">
         <h3 className="text-lg font-bold">About</h3>
         <p className="text-4xl">{"Search for movies, shows, and anime using vibes. Games to be added soon."}</p>
-        <p>xhh © 2026</p>
+        <div className="flex justify-between items-center">
+          <p>xhh © 2026</p>
+          <div>
+            <img
+              className="w-11"
+              src="https://www.themoviedb.org/assets/v4/logos/v2/blue_square_2-d537fb228cf3ded904ef09b136fe3fec72548ebc1fea3fbbd1ad9e36364db38b.svg"
+            />
+          </div>
+        </div>
         {/* admin stuff */}
         {userRoles?.includes("admin") ? (
           <>
@@ -719,6 +745,7 @@ const router = createBrowserRouter([{ path: "/", element: <App /> }])
 const Providers = () => (
   <QueryClientProvider client={queryClient}>
     <RouterProvider router={router} />
+    <ReactQueryDevtools />
   </QueryClientProvider>
 )
 

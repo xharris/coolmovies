@@ -13,3 +13,5 @@ wheels/
 node_modules/
 
 .DS_Store
+
+backup-*.gz

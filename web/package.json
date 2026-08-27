@@ -11,7 +11,8 @@
   },
   "dependencies": {
     "@tailwindcss/vite": "^4.3.0",
-    "@tanstack/react-query": "^5.100.10",
+    "@tanstack/react-query": "^5.102.6",
+    "@tanstack/react-query-devtools": "^5.102.6",
     "classnames": "^2.5.1",
     "daisyui": "^5.5.19",
     "react": "^19.2.6",

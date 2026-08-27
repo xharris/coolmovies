@@ -17,6 +17,7 @@ class Media(BaseModel):
     id: PydanticObjectId = None
     title: str
     year: int
+    popularity: float = 0
     stats: Stats = Field(default_factory=Stats)
     type: MediaType = Field(default=MediaType.watch)
     img: Optional[str] = None
