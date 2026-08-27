@@ -20,29 +20,43 @@ class Movies(Client):
 
     def search(self, q: str) -> List[model.Media]:
         out: List[model.Media] = []
-        resp = self.get('https://api.themoviedb.org/3/search/movie', params={'query': q})
-        resp.raise_for_status()
-        json_data = resp.json()
+        # search movies
+        resp_movies = self.get('https://api.themoviedb.org/3/search/movie', params={'query': q})
+        resp_movies.raise_for_status()
+        json_movies = resp_movies.json()
+        # search shows
+        resp_tv = self.get('https://api.themoviedb.org/3/search/tv', params={'query': q})
+        resp_tv.raise_for_status()
+        json_tv = resp_tv.json()
+
+        results = [*json_movies['results'], *json_tv['results']]
         today = date.today()
-        for result in json_data['results']:
+
+        for result in results:
+            is_tv = 'first_air_date' in result
             # get external ids
-            resp2 = self.get('https://api.themoviedb.org/3/movie/{movie_id}/external_ids'.format(movie_id=result['id']))
+            resp2 = \
+                self.get('https://api.themoviedb.org/3/tv/{series_id}/external_ids'.format(series_id=result['id'])) if is_tv else\
+                self.get('https://api.themoviedb.org/3/movie/{movie_id}/external_ids'.format(movie_id=result['id']))
             resp2.raise_for_status()
             json_data2 = resp2.json()
 
-            if len(result['release_date']) == 0:
+            str_release_date = result['first_air_date'] if is_tv else result['release_date']
+            if len(str_release_date) == 0:
                 continue
-            release_date = date.fromisoformat(result['release_date'])
+            release_date = date.fromisoformat(str_release_date)
             if release_date.year is None or release_date.year > today.year or not 'imdb_id' in json_data2:
                 continue
 
             # get details
-            resp_details = self.get('https://api.themoviedb.org/3/movie/{movie_id}'.format(movie_id=result['id']))
+            resp_details = \
+                self.get('https://api.themoviedb.org/3/tv/{series_id}'.format(series_id=result['id'])) if is_tv else\
+                self.get('https://api.themoviedb.org/3/movie/{movie_id}'.format(movie_id=result['id']))
             resp_details.raise_for_status()
             json_details = resp_details.json()
 
             media = model.Media(
-                title = result['title'],
+                title =  result['name'] if is_tv else result['title'],
                 year = release_date.year,
                 img = 'https://image.tmdb.org/t/p/w500/%s' % (result['poster_path']),
                 type = model.MediaType.watch,
